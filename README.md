@@ -56,10 +56,13 @@ The sidebar allows you to input your Betaflight values:
 - **UI/UX**: Material Design CSS with Light/Dark mode support
 - **Logic**: Vanilla JavaScript (ES6+)
 
-##  Acknowledgments
+## Development notes
 
-- **Betaflight Team**: For the mathematical models used in modern FPV flight.
-- **Three.js Community**: For the robust 3D engine documentation.
+The code is intentionally dependency-light: Three.js provides the renderer and HTML5 Gamepad API provides inputs. There is no build system in this repository. For deeper instrumentation add unit tests against `calculateActualRate` using a simple numeric test harness and consider adding a small calibration flow that auto-detects axis numbers by sampling stick motion and selecting the highest-variance axes for mapping.
+
+## License and credits
+
+This project references Betaflight algorithms for rate modeling and uses Three.js for 3D rendering. Attribution to Betaflight and Three.js is retained. The author and repository owner is AristidesAI; see the GitHub repository for source, issues, and contributions.
 
 
 **Created by [AristidesAI](https://github.com/AristidesAI)** [@aristides.fpv on instagram](https://www.instagram.com/aristides.fpv/)
