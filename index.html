@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Betaflight Rate Visualizer</title>
+    <title>Betaflight Actual Rates Visualizer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #2196F3;
+            --accent: #FFC107;
             --bg-light: #f5f5f5;
             --surface-light: #ffffff;
             --text-light: #333333;
@@ -16,7 +17,6 @@
             --surface-dark: #1e1e1e;
             --text-dark: #e0e0e0;
             --border-radius: 12px;
-            --shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
         body {
@@ -35,232 +35,261 @@
             color: var(--text-dark);
         }
 
-        /* Sidebar UI */
+        /* --- SIDEBAR --- */
         #sidebar {
-            width: 320px;
+            width: 340px;
             padding: 20px;
             background-color: var(--surface-light);
             box-shadow: 2px 0 10px rgba(0,0,0,0.05);
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            z-index: 10;
+            gap: 15px;
+            z-index: 20;
             overflow-y: auto;
             transition: background-color 0.3s;
         }
 
-        body.dark-mode #sidebar {
-            background-color: var(--surface-dark);
-        }
+        body.dark-mode #sidebar { background-color: var(--surface-dark); }
 
-        h2 { margin: 0; font-weight: 700; }
-        h3 { margin: 0 0 10px 0; font-size: 0.9rem; text-transform: uppercase; color: var(--primary); }
+        h2 { margin: 0; font-weight: 700; font-size: 1.5rem; }
+        h3 { margin: 0 0 8px 0; font-size: 0.85rem; text-transform: uppercase; color: var(--primary); letter-spacing: 0.5px; }
 
         .control-group {
-            background: rgba(0,0,0,0.03);
-            padding: 15px;
+            background: rgba(0,0,0,0.04);
+            padding: 12px;
             border-radius: var(--border-radius);
         }
-        
         body.dark-mode .control-group { background: rgba(255,255,255,0.05); }
 
-        label { display: block; font-size: 0.8rem; margin-bottom: 5px; }
-        
-        input[type="number"] {
-            width: 100%;
-            padding: 10px;
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .input-row label { font-size: 0.8rem; flex: 1; }
+        .input-row input {
+            width: 70px;
+            padding: 6px;
             border: 1px solid #ccc;
-            border-radius: 8px;
+            border-radius: 6px;
             background: transparent;
             color: inherit;
-            box-sizing: border-box;
-            margin-bottom: 10px;
-            font-family: inherit;
+            text-align: right;
         }
 
+        /* --- BUTTONS --- */
         button {
             padding: 12px;
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            font-weight: 500;
+            font-weight: 600;
             transition: 0.2s;
+            width: 100%;
+            margin-bottom: 5px;
         }
+        button:hover { filter: brightness(1.1); }
+        
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-secondary { background-color: #607D8B; color: white; }
+        .btn-accent { background-color: var(--accent); color: #333; }
 
-        #theme-toggle {
-            background-color: var(--primary);
-            color: white;
-            margin-top: auto;
-        }
-
-        #reset-cam {
-            background-color: #607D8B;
-            color: white;
-            margin-top: 10px;
-        }
-
-        /* Canvas Area */
+        /* --- CANVAS --- */
         #canvas-container {
             flex-grow: 1;
             position: relative;
             background: radial-gradient(circle at center, #e0e0e0 0%, #bdbdbd 100%);
         }
-
         body.dark-mode #canvas-container {
             background: radial-gradient(circle at center, #2c2c2c 0%, #000000 100%);
         }
 
-        /* Notifications */
+        /* --- MAPPING MODAL --- */
+        #mapping-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 100;
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: var(--surface-light);
+            padding: 25px;
+            border-radius: 16px;
+            width: 450px;
+            max-width: 90%;
+            color: var(--text-light);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        body.dark-mode .modal-content {
+            background: var(--surface-dark);
+            color: var(--text-dark);
+        }
+        
+        .map-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+        body.dark-mode .map-row { border-bottom: 1px solid rgba(255,255,255,0.1); }
+        
+        .map-label { width: 60px; font-weight: bold; }
+        .map-select { flex: 1; padding: 8px; border-radius: 6px; }
+        .map-invert { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; }
+        .axis-viz {
+            width: 100px;
+            height: 10px;
+            background: #ddd;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+        .axis-bar {
+            position: absolute;
+            top: 0; left: 50%;
+            height: 100%;
+            width: 0%; /* Dynamic */
+            background: var(--primary);
+            transition: width 0.05s, left 0.05s;
+        }
+
+        /* --- NOTIFICATIONS --- */
         #notification-area {
             position: absolute;
-            top: 20px;
-            right: 20px;
+            top: 20px; right: 20px;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            z-index: 100;
+            z-index: 200;
         }
-
         .toast {
             background-color: var(--surface-light);
             color: var(--text-light);
-            padding: 15px 20px;
-            border-radius: var(--border-radius);
+            padding: 12px 20px;
+            border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             border-left: 5px solid var(--primary);
-            display: flex;
-            align-items: center;
             animation: slideIn 0.3s ease-out;
-            max-width: 300px;
         }
+        body.dark-mode .toast { background-color: var(--surface-dark); color: var(--text-dark); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-        body.dark-mode .toast {
-            background-color: var(--surface-dark);
-            color: var(--text-dark);
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* Stick Visualizer (Mini) */
-        .stick-vis {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-        }
-        .stick-box {
-            width: 48%;
-            height: 100px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            position: relative;
-        }
-        .stick-point {
-            width: 10px;
-            height: 10px;
-            background: var(--primary);
-            border-radius: 50%;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
-        <h2>Rate Tuner</h2>
-        <p style="font-size: 0.8rem; opacity: 0.7;">Plug in your Radiomaster Pocket (Mode 2)</p>
+        <div>
+            <h2>Actual Rates</h2>
+            <p style="font-size: 0.8rem; opacity: 0.7; margin-top:5px;">Betaflight Rate Simulator</p>
+        </div>
+
+        <button id="open-mapping" class="btn-accent">🎮 Configure Controller</button>
 
         <div class="control-group">
             <h3>Roll</h3>
-            <label>Center Sensitivity</label>
-            <input type="number" id="roll-center" value="70">
-            <label>Max Rate</label>
-            <input type="number" id="roll-max" value="670">
-            <label>Expo</label>
-            <input type="number" id="roll-expo" value="0.55" step="0.01">
+            <div class="input-row"><label>Center Sens</label><input type="number" id="roll-center" value="70"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="roll-max" value="670"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="roll-expo" value="0.55" step="0.01"></div>
         </div>
 
         <div class="control-group">
             <h3>Pitch</h3>
-            <label>Center Sensitivity</label>
-            <input type="number" id="pitch-center" value="70">
-            <label>Max Rate</label>
-            <input type="number" id="pitch-max" value="670">
-            <label>Expo</label>
-            <input type="number" id="pitch-expo" value="0.55" step="0.01">
+            <div class="input-row"><label>Center Sens</label><input type="number" id="pitch-center" value="70"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="pitch-max" value="670"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="pitch-expo" value="0.55" step="0.01"></div>
         </div>
 
         <div class="control-group">
             <h3>Yaw</h3>
-            <label>Center Sensitivity</label>
-            <input type="number" id="yaw-center" value="70">
-            <label>Max Rate</label>
-            <input type="number" id="yaw-max" value="670">
-            <label>Expo</label>
-            <input type="number" id="yaw-expo" value="0.55" step="0.01">
+            <div class="input-row"><label>Center Sens</label><input type="number" id="yaw-center" value="70"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="yaw-max" value="670"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="yaw-expo" value="0.55" step="0.01"></div>
         </div>
 
-        <div class="control-group">
-            <h3>Input Monitor</h3>
-            <div class="stick-vis">
-                <div class="stick-box" id="left-stick-box">
-                    <div class="stick-point" id="left-stick"></div>
-                </div>
-                <div class="stick-box" id="right-stick-box">
-                    <div class="stick-point" id="right-stick"></div>
-                </div>
-            </div>
+        <div style="margin-top: auto;">
+            <button id="reset-cam" class="btn-secondary">Reset View</button>
+            <button id="theme-toggle" class="btn-primary">Toggle Dark Mode</button>
         </div>
-
-        <button id="reset-cam">Reset Orientation</button>
-        <button id="theme-toggle">Toggle Dark Mode</button>
     </div>
 
     <div id="canvas-container"></div>
 
     <div id="notification-area"></div>
 
+    <div id="mapping-modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 20px;">Controller Mapping</h2>
+            <p style="font-size: 0.9rem; margin-bottom: 20px; opacity: 0.8;">
+                Move your sticks to identify axes. Assign them to the correct functions.
+            </p>
+
+            <div id="mapping-rows"></div>
+
+            <button id="close-mapping" class="btn-primary" style="margin-top: 20px;">Save & Close</button>
+        </div>
+    </div>
+
     <script>
-        // --- 1. THEME MANAGEMENT ---
+        // --- 1. STATE & STORAGE ---
+        // Default mapping (Generic Gamepad)
+        let config = {
+            mapping: {
+                roll: { axis: 2, invert: false },
+                pitch: { axis: 3, invert: false },
+                yaw: { axis: 0, invert: true },    // Yaw usually needs invert in 3D space
+                throttle: { axis: 1, invert: true } // Throttle -1 is usually UP on gamepads
+            },
+            rates: {
+                // defaults handled in HTML values
+            }
+        };
+
+        // Load from LocalStorage
+        const savedConfig = localStorage.getItem('bf_rate_config');
+        if (savedConfig) {
+            try {
+                const parsed = JSON.parse(savedConfig);
+                if(parsed.mapping) config.mapping = parsed.mapping;
+            } catch(e) { console.log('Config load error'); }
+        }
+
+        function saveConfig() {
+            localStorage.setItem('bf_rate_config', JSON.stringify(config));
+        }
+
+        // --- 2. THEME & UI ---
         const body = document.body;
         const themeBtn = document.getElementById('theme-toggle');
         
-        // Auto-detect system preference
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             body.classList.add('dark-mode');
         }
+        themeBtn.addEventListener('click', () => body.classList.toggle('dark-mode'));
 
-        themeBtn.addEventListener('click', () => {
-            body.classList.toggle('dark-mode');
-        });
-
-        // --- 2. NOTIFICATION SYSTEM ---
-        function showNotification(message) {
+        function showNotification(msg) {
             const area = document.getElementById('notification-area');
             const toast = document.createElement('div');
             toast.className = 'toast';
-            toast.innerText = message;
+            toast.innerText = msg;
             area.appendChild(toast);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(()=>toast.remove(),300);}, 3000);
         }
 
         // --- 3. THREE.JS SETUP ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        
-        // Camera
         const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
-        camera.position.set(0, 2, 4);
+        
+        // Initial Camera Position
+        camera.position.set(0, 1, 3.5);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -268,57 +297,50 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         container.appendChild(renderer.domElement);
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(5, 10, 7);
-        scene.add(dirLight);
+        // Lights
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+        dl.position.set(5, 10, 7);
+        scene.add(dl);
 
-        // DRONE MODEL (Procedural Group)
+        // Drone Group
         const droneGroup = new THREE.Group();
+        
+        // Visual Body
+        const matBody = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
+        const matArm = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.5 });
+        const matProp = new THREE.MeshStandardMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.4 });
 
-        // Body
-        const bodyGeo = new THREE.BoxGeometry(0.8, 0.15, 0.4);
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+        const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.3), matBody);
         droneGroup.add(bodyMesh);
 
-        // Arms
-        const armGeo = new THREE.BoxGeometry(0.1, 0.05, 1.8);
-        const armMat = new THREE.MeshStandardMaterial({ color: 0x2196F3 }); // Blue arms
-        const arm1 = new THREE.Mesh(armGeo, armMat);
-        arm1.rotation.y = Math.PI / 4;
-        const arm2 = new THREE.Mesh(armGeo, armMat);
-        arm2.rotation.y = -Math.PI / 4;
+        // Arms (X Shape)
+        const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.8), matArm);
+        arm1.rotation.y = Math.PI/4;
+        const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.8), matArm);
+        arm2.rotation.y = -Math.PI/4;
         droneGroup.add(arm1);
         droneGroup.add(arm2);
 
-        // Motors/Props
-        const propGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.02, 32);
-        const propMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.5 });
-        const positions = [
-            { x: -0.6, z: 0.6 }, { x: 0.6, z: -0.6 }, // FL, BR
-            { x: 0.6, z: 0.6 }, { x: -0.6, z: -0.6 }  // FR, BL
-        ];
-
-        positions.forEach(pos => {
-            const prop = new THREE.Mesh(propGeo, propMat);
-            prop.position.set(pos.x, 0.1, pos.z);
+        // Props
+        [
+            {x:-0.6, z:0.6}, {x:0.6, z:-0.6}, 
+            {x:0.6, z:0.6}, {x:-0.6, z:-0.6}
+        ].forEach(pos => {
+            const prop = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.02, 32), matProp);
+            prop.position.set(pos.x, 0.08, pos.z);
             droneGroup.add(prop);
         });
 
-        // Add an axis helper to see orientation clearly
-        const axesHelper = new THREE.AxesHelper(1);
-        droneGroup.add(axesHelper);
-
+        // Axis Helper (Red=X, Green=Y, Blue=Z)
+        droneGroup.add(new THREE.AxesHelper(1));
         scene.add(droneGroup);
 
-        // Grid
-        const gridHelper = new THREE.GridHelper(20, 20);
-        scene.add(gridHelper);
+        // Ground Grid
+        const grid = new THREE.GridHelper(30, 30, 0x888888, 0xcccccc);
+        grid.position.y = -2;
+        scene.add(grid);
 
-        // Resize handler
         window.addEventListener('resize', () => {
             camera.aspect = container.clientWidth / container.clientHeight;
             camera.updateProjectionMatrix();
@@ -327,177 +349,179 @@
 
         document.getElementById('reset-cam').addEventListener('click', () => {
             droneGroup.rotation.set(0,0,0);
+            droneGroup.position.set(0,0,0);
         });
 
-        // --- 4. ACTUAL RATES MATH ---
-        // Betaflight Actual Rates Formula logic
-        function calculateActualRate(input, centerSensitivity, maxRate, expo) {
-            // Input is -1 to 1. We treat it symmetrically.
-            const deflection = Math.abs(input);
-            const sign = Math.sign(input);
-            
-            // If deadband needed, add here (skipping for simplicity)
-            
-            // Expo factor for Actual Rates:
-            // The formula transitions from Center Sensitivity to Max Rate based on Expo.
-            // Simplified Approximation of BF Actual:
-            // Rate = Input * (CenterSens + (MaxRate - CenterSens) * (Input^ExpoCoeff))
-            // Where ExpoCoeff usually scales with the expo slider.
-            
-            // Note: Exact BF source uses a specific curve function. 
-            // This is a high-fidelity visual approximation:
-            
-            if (deflection === 0) return 0;
+        // --- 4. CONTROLLER MAPPING UI LOGIC ---
+        const modal = document.getElementById('mapping-modal');
+        const rowsContainer = document.getElementById('mapping-rows');
+        const functions = ['Roll', 'Pitch', 'Yaw', 'Throttle'];
+        
+        let activeGamepadIndex = null;
 
-            const expofactor = deflection * (Math.pow(deflection, 5) * expo + deflection * (1 - expo));
-            // Standard Betaflight "Super Rate" style calculation logic is complex to replicate 1:1 without the C code,
-            // but Actual Rates is defined by linear segments if expo is 0.
+        document.getElementById('open-mapping').addEventListener('click', () => {
+            if (activeGamepadIndex === null) {
+                showNotification("Connect controller first!");
+                return;
+            }
+            renderMappingUI();
+            modal.style.display = 'flex';
+        });
+
+        document.getElementById('close-mapping').addEventListener('click', () => {
+            modal.style.display = 'none';
+            saveConfig();
+            showNotification("Mapping Saved");
+        });
+
+        function renderMappingUI() {
+            rowsContainer.innerHTML = '';
             
-            // Let's use the widely used "Actual" formula structure:
-            // rate = input * ( center_sensitivity + (max_rate - center_sensitivity) * input ); // (Linear/Expo mix)
+            functions.forEach(func => {
+                const key = func.toLowerCase();
+                const setting = config.mapping[key];
+
+                const row = document.createElement('div');
+                row.className = 'map-row';
+
+                // Label
+                const label = document.createElement('div');
+                label.className = 'map-label';
+                label.innerText = func;
+                
+                // Select Axis
+                const select = document.createElement('select');
+                select.className = 'map-select';
+                for(let i=0; i<8; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.innerText = `Axis ${i}`;
+                    if(i === setting.axis) opt.selected = true;
+                    select.appendChild(opt);
+                }
+                select.onchange = (e) => config.mapping[key].axis = parseInt(e.target.value);
+
+                // Invert Checkbox
+                const invertDiv = document.createElement('div');
+                invertDiv.className = 'map-invert';
+                const chk = document.createElement('input');
+                chk.type = 'checkbox';
+                chk.checked = setting.invert;
+                chk.onchange = (e) => config.mapping[key].invert = e.target.checked;
+                invertDiv.appendChild(chk);
+                invertDiv.appendChild(document.createTextNode('Inv'));
+
+                // Live Visualizer
+                const viz = document.createElement('div');
+                viz.className = 'axis-viz';
+                const bar = document.createElement('div');
+                bar.className = 'axis-bar';
+                bar.id = `viz-${key}`; // ID for animation loop update
+                viz.appendChild(bar);
+
+                row.appendChild(label);
+                row.appendChild(select);
+                row.appendChild(invertDiv);
+                row.appendChild(viz);
+                rowsContainer.appendChild(row);
+            });
+        }
+
+        // --- 5. ACTUAL RATES MATH ---
+        function calculateActualRate(input, centerSens, maxRate, expo) {
+            const deflection = Math.abs(input);
+            if (deflection < 0.02) return 0; // deadband
             
-            // Let's implement the specific logic used in web configurators:
-            // k = deflection
-            // rcRate = centerSensitivity
-            // sRate = maxRate
-            
-            // Actual Rate Calculation:
-            // degrees/sec = k * ( centerSens + (maxRate - centerSens) * k^expo ) ??
-            
-            // Let's stick to a solid functional curve:
-            // 1. Calculate the rate at this deflection
-            const t = deflection; 
-            // e = expo (0..1) maps to power curve
-            // power roughly 1 + 5*expo
-            
-            // Interpolate between center sens and max rate
-            // This formula works well visually:
-            const s = centerSensitivity;
+            const s = centerSens;
             const m = maxRate;
             const e = expo;
             
-            // This creates the curve
-            const curve = Math.pow(deflection, 1 + (e * 3)); // Expo affects curve steepness
+            // Betaflight-ish curve approximation for visual smoothness
+            const curve = Math.pow(deflection, 1 + (e * 3));
             const rateMag = s + (m - s) * curve;
             
-            return (deflection * rateMag) * sign;
+            return (deflection * rateMag) * Math.sign(input);
         }
 
-        // --- 5. GAMEPAD LOOP ---
-        let gamepadIndex = null;
-        const DEAD_ZONE = 0.05;
-
+        // --- 6. MAIN LOOP ---
         window.addEventListener("gamepadconnected", (e) => {
-            gamepadIndex = e.gamepad.index;
-            showNotification(`Controller Connected: ${e.gamepad.id}`);
+            activeGamepadIndex = e.gamepad.index;
+            showNotification(`Connected: ${e.gamepad.id}`);
+        });
+        window.addEventListener("gamepaddisconnected", () => {
+            activeGamepadIndex = null;
+            showNotification("Disconnected");
         });
 
-        window.addEventListener("gamepaddisconnected", (e) => {
-            if (gamepadIndex === e.gamepad.index) {
-                gamepadIndex = null;
-                showNotification("Controller Disconnected");
-            }
-        });
-
-        function applyDeadzone(value) {
-            if (Math.abs(value) < DEAD_ZONE) return 0;
-            return value;
-        }
-
-        // Animation Loop
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
+            const dt = clock.getDelta();
 
-            const dt = clock.getDelta(); // Time since last frame in seconds
-
-            if (gamepadIndex !== null) {
-                const gp = navigator.getGamepads()[gamepadIndex];
+            if (activeGamepadIndex !== null) {
+                const gp = navigator.getGamepads()[activeGamepadIndex];
                 if (gp) {
-                    // Standard Mapping (Radiomaster Pocket usually follows standard HID)
-                    // Axis 0: Left Stick X (Yaw) -> or Roll depending on OS
-                    // Axis 1: Left Stick Y (Throttle)
-                    // Axis 2: Right Stick X (Roll) -> or Yaw
-                    // Axis 3: Right Stick Y (Pitch)
                     
-                    // NOTE: Mapping varies by OS. This is a common Mode 2 map:
-                    // Axis 0: Roll (Right X)
-                    // Axis 1: Pitch (Right Y)
-                    // Axis 2: Yaw (Left X) - sometimes Axis 3 or 4
-                    // Axis 3: Throttle (Left Y)
-                    
-                    // We will assume standard Windows/Chrome mapping for generic controller:
-                    // 0: Left Stick Horizontal (Yaw)
-                    // 1: Left Stick Vertical (Throttle)
-                    // 2: Right Stick Horizontal (Roll)
-                    // 3: Right Stick Vertical (Pitch)
-                    
-                    // However, Radiomaster often maps: 
-                    // 0: Roll, 1: Pitch, 2: Throttle, 3: Yaw (Standard TAER/AETR orders)
-                    // Let's try to detect or provide a standard AETR map.
-                    // Assuming AETR (common for ELRS/Crossfire):
-                    // 0: Roll
-                    // 1: Pitch
-                    // 2: Throttle (often Axis 5 or similar on some OS, let's stick to 0-3 for basic)
-                    // 3: Yaw
-                    
-                    // User might need to experiment, but here is a standard layout to start:
-                    const rollInput = applyDeadzone(gp.axes[0]);
-                    const pitchInput = applyDeadzone(gp.axes[1]); 
-                    const throttleInput = gp.axes[2]; // Usually -1 to 1
-                    const yawInput = applyDeadzone(gp.axes[3]);
+                    // 1. READ RAW AXES BASED ON MAPPING
+                    const getAxisVal = (name) => {
+                        const map = config.mapping[name];
+                        let val = gp.axes[map.axis] || 0;
+                        if (map.invert) val *= -1;
+                        return val;
+                    };
 
-                    // Update UI Sticks
-                    const ls = document.getElementById('left-stick');
-                    const rs = document.getElementById('right-stick');
-                    
-                    // Visualizer (Mode 2)
-                    // Left Stick: Yaw (X), Throttle (Y)
-                    // Right Stick: Roll (X), Pitch (Y)
-                    // Note: Browser axes usually 0/1 are left stick, 2/3 are right stick.
-                    // Let's assume Browser Standard:
-                    // 0: Left X, 1: Left Y
-                    // 2: Right X, 3: Right Y
-                    
-                    // Remapping for "Mode 2" Flight Logic based on Browser Standard
-                    // Left Stick (0,1) -> Yaw, Throttle
-                    // Right Stick (2,3) -> Roll, Pitch
-                    
-                    const axisLX = gp.axes[0]; // Yaw
-                    const axisLY = gp.axes[1]; // Throttle
-                    const axisRX = gp.axes[2]; // Roll
-                    const axisRY = gp.axes[3]; // Pitch
+                    const rawRoll = getAxisVal('roll');
+                    const rawPitch = getAxisVal('pitch');
+                    const rawYaw = getAxisVal('yaw');
+                    const rawThr = getAxisVal('throttle');
 
-                    // Update UI Dots
-                    const stickScale = 45; // pixel offset
-                    ls.style.transform = `translate(calc(-50% + ${axisLX * stickScale}px), calc(-50% + ${axisLY * stickScale}px))`;
-                    rs.style.transform = `translate(calc(-50% + ${axisRX * stickScale}px), calc(-50% + ${axisRY * stickScale}px))`;
+                    // 2. UPDATE MAPPING MENU VISUALIZERS (If open)
+                    if(modal.style.display === 'flex') {
+                        const updateViz = (name, val) => {
+                            const bar = document.getElementById(`viz-${name}`);
+                            if(bar) {
+                                // Map -1..1 to 0..100%
+                                // Center (0) = 50%
+                                const pct = (val + 1) * 50;
+                                bar.style.left = val < 0 ? `${pct}%` : '50%';
+                                bar.style.width = `${Math.abs(val) * 50}%`;
+                            }
+                        };
+                        updateViz('roll', rawRoll);
+                        updateViz('pitch', rawPitch);
+                        updateViz('yaw', rawYaw);
+                        updateViz('throttle', rawThr);
+                    }
 
-                    // Get Values from Inputs
-                    const rollC = parseFloat(document.getElementById('roll-center').value);
-                    const rollM = parseFloat(document.getElementById('roll-max').value);
-                    const rollE = parseFloat(document.getElementById('roll-expo').value);
+                    // 3. APPLY RATES
+                    const rC = parseFloat(document.getElementById('roll-center').value);
+                    const rM = parseFloat(document.getElementById('roll-max').value);
+                    const rE = parseFloat(document.getElementById('roll-expo').value);
 
-                    const pitchC = parseFloat(document.getElementById('pitch-center').value);
-                    const pitchM = parseFloat(document.getElementById('pitch-max').value);
-                    const pitchE = parseFloat(document.getElementById('pitch-expo').value);
+                    const pC = parseFloat(document.getElementById('pitch-center').value);
+                    const pM = parseFloat(document.getElementById('pitch-max').value);
+                    const pE = parseFloat(document.getElementById('pitch-expo').value);
 
-                    const yawC = parseFloat(document.getElementById('yaw-center').value);
-                    const yawM = parseFloat(document.getElementById('yaw-max').value);
-                    const yawE = parseFloat(document.getElementById('yaw-expo').value);
+                    const yC = parseFloat(document.getElementById('yaw-center').value);
+                    const yM = parseFloat(document.getElementById('yaw-max').value);
+                    const yE = parseFloat(document.getElementById('yaw-expo').value);
 
-                    // Calculate Deg/Sec
-                    // Note: Pitch input is usually inverted in 3D space relative to stick
-                    const rollRate = calculateActualRate(axisRX, rollC, rollM, rollE);
-                    const pitchRate = calculateActualRate(axisRY, pitchC, pitchM, pitchE); 
-                    const yawRate = calculateActualRate(axisLX * -1, yawC, yawM, yawE); // Yaw inverted usually
+                    const rollRate = calculateActualRate(rawRoll, rC, rM, rE);
+                    const pitchRate = calculateActualRate(rawPitch, pC, pM, pE);
+                    const yawRate = calculateActualRate(rawYaw, yC, yM, yE);
 
-                    // Apply Rotation
-                    // RotateOnAxis allows local rotation (acro mode style)
+                    // 4. APPLY ROTATION
+                    // Pitch (X axis), Yaw (Y axis), Roll (Z axis)
                     droneGroup.rotateX(THREE.Math.degToRad(pitchRate * dt));
-                    droneGroup.rotateZ(THREE.Math.degToRad(rollRate * -1 * dt)); // Roll inverted vis
-                    droneGroup.rotateY(THREE.Math.degToRad(yawRate * dt));
+                    droneGroup.rotateY(THREE.Math.degToRad(yawRate * dt)); 
+                    droneGroup.rotateZ(THREE.Math.degToRad(-rollRate * dt)); // Roll usually inverted visually
+
+                    // 5. THROTTLE PHYSICS (Floating)
+                    // Map throttle (-1 to 1) to Height (-1.5 to 1.5)
+                    const targetY = rawThr * 2.0; 
+                    // Smooth lerp
+                    droneGroup.position.y += (targetY - droneGroup.position.y) * 5 * dt;
                 }
             }
 
