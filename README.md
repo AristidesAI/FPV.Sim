@@ -1,6 +1,6 @@
 # Betaflight Actual Rates Visualizer
 
-A web-based 3D simulator designed for FPV pilots to test and tune **Betaflight Actual Rates** using a real radio transmitter via USB. This tool provides a zero-risk environment to visualize stick feel and rotation speeds before applying them to a real quadcopter.
+A web-based 3D simulator designed for FPV pilots to test and tune **Betaflight Actual Rates** using a real radio transmitter via USB. This tool provides a zero-risk environment to visualize stick feel and rotation speeds before applying them to a real quadcopter, this page works similarly to the betaflight rate configuration page, allowing you to test your rates in a test environment, without flight controller heat sources. 
 
 [**Launch the Simulator**](https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/) | [**Video**](https://github.com/AristidesAI/Betaflight-Actual-Rates-Simulator-/blob/df0eb93fe2320d19c9b09be1c42b6bcfeea714bc/ActualRates.mp4)
 Img1  | Img2
