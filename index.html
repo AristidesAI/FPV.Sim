@@ -997,21 +997,24 @@
 
         // --- 15. CAMERA UPDATE ---
         function updateCamera(dt) {
-            // Get drone's yaw rotation only (for camera following)
-            const droneYaw = droneGroup.rotation.y;
+            // Fixed third-person camera - stays behind drone regardless of orientation
+            // Camera offset in drone's local space
+            const localOffset = cameraController.offset.clone();
 
-            // Calculate target camera position (behind and above drone)
-            const offset = cameraController.offset.clone();
-            offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), droneYaw);
+            // Transform offset by drone's full rotation (follows all axes)
+            localOffset.applyQuaternion(droneGroup.quaternion);
 
-            const targetPos = physics.position.clone().add(offset);
+            // Target position is drone position + rotated offset
+            const targetPos = physics.position.clone().add(localOffset);
 
             // Smooth camera movement
             cameraController.currentPos.lerp(targetPos, cameraController.smoothing * dt);
 
-            // Look at drone with some smoothing
-            const targetLookAt = physics.position.clone();
-            targetLookAt.y += 1; // Look slightly above drone center
+            // Look at point slightly in front of drone (in drone's local forward direction)
+            const lookAheadLocal = new THREE.Vector3(0, 0, 5); // Look ahead in drone's Z direction
+            lookAheadLocal.applyQuaternion(droneGroup.quaternion);
+            const targetLookAt = physics.position.clone().add(lookAheadLocal);
+
             cameraController.currentLookAt.lerp(targetLookAt, cameraController.smoothing * dt);
 
             camera.position.copy(cameraController.currentPos);
