@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Betaflight Actual Rates Visualizer</title>
+    <title>FPV Racing Simulator - Betaflight Actual Rates</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -181,17 +181,138 @@
         body.dark-mode .toast { background-color: var(--surface-dark); color: var(--text-dark); }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
+        /* --- HUD OVERLAY --- */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+            pointer-events: none;
+            z-index: 50;
+        }
+        .hud-row {
+            margin-bottom: 5px;
+            display: flex;
+            gap: 15px;
+        }
+        .hud-label { opacity: 0.7; }
+        .hud-value { font-weight: bold; min-width: 60px; }
+
+        /* --- CRASH OVERLAY --- */
+        #crash-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(180, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 80;
+            backdrop-filter: blur(3px);
+        }
+        #crash-overlay h1 {
+            font-size: 4rem;
+            color: white;
+            margin: 0;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+        }
+        #crash-overlay p {
+            font-size: 1.2rem;
+            color: white;
+            opacity: 0.9;
+        }
+
+        /* --- COUNTDOWN OVERLAY --- */
+        #countdown-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 75;
+            pointer-events: none;
+        }
+        #countdown-text {
+            font-size: 8rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 4px 4px 10px rgba(0,0,0,0.7);
+        }
+
+        /* --- RACE INFO --- */
+        #race-info {
+            position: absolute;
+            top: 20px;
+            right: 380px;
+            background: rgba(0,0,0,0.6);
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Roboto Mono', monospace;
+            z-index: 50;
+            display: none;
+        }
+        #race-info .time { font-size: 2rem; font-weight: bold; }
+        #race-info .lap-info { font-size: 0.9rem; opacity: 0.8; margin-top: 5px; }
+        #race-info .gate-info { font-size: 1rem; margin-top: 8px; color: #4CAF50; }
+
+        /* --- MODE BUTTONS --- */
+        .mode-btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+        .mode-btn.active {
+            background-color: var(--accent) !important;
+            color: #333 !important;
+        }
+
+        /* --- KEYBOARD HINTS --- */
+        .key-hints {
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+        .key {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
     </style>
 </head>
 <body>
 
     <div id="sidebar">
         <div>
-            <h2>Actual Rates</h2>
-            <p style="font-size: 0.8rem; opacity: 0.7; margin-top:5px;">Betaflight Rate Simulator</p>
+            <h2>FPV Racing Sim</h2>
+            <p style="font-size: 0.8rem; opacity: 0.7; margin-top:5px;">Betaflight Actual Rates</p>
         </div>
 
-        <button id="open-mapping" class="btn-accent">🎮 Configure Controller</button>
+        <div class="control-group">
+            <h3>Game Mode</h3>
+            <div class="mode-btn-group">
+                <button id="mode-freefly" class="btn-secondary mode-btn active">Free Flight</button>
+                <button id="mode-race" class="btn-secondary mode-btn">Race</button>
+            </div>
+            <div class="key-hints">
+                <span class="key">R</span> Reset &nbsp;
+                <span class="key">Space</span> Start Race<br>
+                <span class="key">Esc</span> Free Flight
+            </div>
+        </div>
+
+        <button id="open-mapping" class="btn-accent">Configure Controller</button>
 
         <div class="control-group">
             <h3>Roll</h3>
@@ -220,7 +341,44 @@
         </div>
     </div>
 
-    <div id="canvas-container"></div>
+    <div id="canvas-container">
+        <!-- HUD Overlay -->
+        <div id="hud">
+            <div class="hud-row">
+                <span class="hud-label">Speed:</span>
+                <span class="hud-value" id="hud-speed">0</span>
+                <span>m/s</span>
+            </div>
+            <div class="hud-row">
+                <span class="hud-label">Alt:</span>
+                <span class="hud-value" id="hud-alt">0</span>
+                <span>m</span>
+            </div>
+            <div class="hud-row">
+                <span class="hud-label">Throttle:</span>
+                <span class="hud-value" id="hud-throttle">0</span>
+                <span>%</span>
+            </div>
+        </div>
+
+        <!-- Race Info Panel -->
+        <div id="race-info">
+            <div class="time" id="race-time">00:00.000</div>
+            <div class="lap-info">Best: <span id="best-lap">--:--</span></div>
+            <div class="gate-info" id="gate-counter">Gate 0 / 0</div>
+        </div>
+
+        <!-- Crash Overlay -->
+        <div id="crash-overlay">
+            <h1>CRASHED!</h1>
+            <p>Press <strong>R</strong> to reset</p>
+        </div>
+
+        <!-- Countdown Overlay -->
+        <div id="countdown-overlay">
+            <div id="countdown-text">3</div>
+        </div>
+    </div>
 
     <div id="notification-area"></div>
 
@@ -238,26 +396,26 @@
     </div>
 
     <script>
-        // --- 1. STATE & STORAGE ---
-        // Default mapping (Generic Gamepad)
+        // ============================================================
+        // FPV RACING SIMULATOR - BETAFLIGHT ACTUAL RATES
+        // ============================================================
+
+        // --- 1. STATE & CONFIGURATION ---
         let config = {
             mapping: {
                 roll: { axis: 2, invert: false },
                 pitch: { axis: 3, invert: false },
-                yaw: { axis: 0, invert: true },    // Yaw usually needs invert in 3D space
-                throttle: { axis: 1, invert: true } // Throttle -1 is usually UP on gamepads
-            },
-            rates: {
-                // defaults handled in HTML values
+                yaw: { axis: 0, invert: true },
+                throttle: { axis: 1, invert: true }
             }
         };
 
-        // Load from LocalStorage
+        // Load saved config
         const savedConfig = localStorage.getItem('bf_rate_config');
         if (savedConfig) {
             try {
                 const parsed = JSON.parse(savedConfig);
-                if(parsed.mapping) config.mapping = parsed.mapping;
+                if (parsed.mapping) config.mapping = parsed.mapping;
             } catch(e) { console.log('Config load error'); }
         }
 
@@ -265,10 +423,47 @@
             localStorage.setItem('bf_rate_config', JSON.stringify(config));
         }
 
-        // --- 2. THEME & UI ---
+        // --- 2. PHYSICS STATE ---
+        const physics = {
+            position: new THREE.Vector3(0, 5, 0),
+            velocity: new THREE.Vector3(0, 0, 0),
+            gravity: 9.81,
+            dragCoeff: 0.3,
+            maxThrust: 25,      // Force at full throttle
+            hoverThrust: 0.4,   // Throttle needed to hover (approximate)
+            crashed: false,
+            droneRadius: 0.5
+        };
+
+        const spawnPoint = new THREE.Vector3(0, 5, 0);
+
+        // --- 3. GAME STATE ---
+        const gameState = {
+            mode: 'freefly',        // 'freefly' | 'countdown' | 'racing' | 'crashed'
+            raceStartTime: 0,
+            currentLapTime: 0,
+            currentGate: 0,
+            totalGates: 0,
+            lapTimes: [],
+            bestLap: null
+        };
+
+        // Load best lap from localStorage
+        const savedBestLap = localStorage.getItem('fpv_best_lap');
+        if (savedBestLap) gameState.bestLap = parseFloat(savedBestLap);
+
+        // --- 4. CAMERA CONTROLLER ---
+        const cameraController = {
+            offset: new THREE.Vector3(0, 3, -8),
+            smoothing: 4.0,
+            currentPos: new THREE.Vector3(0, 8, -12),
+            currentLookAt: new THREE.Vector3(0, 5, 0)
+        };
+
+        // --- 5. THEME & UI ---
         const body = document.body;
         const themeBtn = document.getElementById('theme-toggle');
-        
+
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             body.classList.add('dark-mode');
         }
@@ -280,84 +475,624 @@
             toast.className = 'toast';
             toast.innerText = msg;
             area.appendChild(toast);
-            setTimeout(() => { toast.style.opacity = '0'; setTimeout(()=>toast.remove(),300);}, 3000);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
         }
 
-        // --- 3. THREE.JS SETUP ---
+        // --- 6. THREE.JS SCENE SETUP ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
-        
-        // Initial Camera Position
-        camera.position.set(0, 1, 3.5);
-        camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // Sky gradient background
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 100, 500);
+
+        const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.copy(cameraController.currentPos);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(renderer.domElement);
 
-        // Lights
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-        const dl = new THREE.DirectionalLight(0xffffff, 0.8);
-        dl.position.set(5, 10, 7);
-        scene.add(dl);
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
 
-        // Drone Group
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        sunLight.position.set(50, 100, 50);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 300;
+        sunLight.shadow.camera.left = -100;
+        sunLight.shadow.camera.right = 100;
+        sunLight.shadow.camera.top = 100;
+        sunLight.shadow.camera.bottom = -100;
+        scene.add(sunLight);
+
+        // --- 7. GROUND PLANE ---
+        const groundSize = 400;
+        const groundGeom = new THREE.PlaneGeometry(groundSize, groundSize, 50, 50);
+        const groundMat = new THREE.MeshStandardMaterial({
+            color: 0x3d8c40,
+            roughness: 0.9
+        });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Grid overlay on ground
+        const gridHelper = new THREE.GridHelper(groundSize, 100, 0x2d6b30, 0x2d6b30);
+        gridHelper.position.y = 0.01;
+        gridHelper.material.opacity = 0.3;
+        gridHelper.material.transparent = true;
+        scene.add(gridHelper);
+
+        // --- 8. DRONE MODEL ---
         const droneGroup = new THREE.Group();
-        
-        // Visual Body
-        const matBody = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
-        const matArm = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.5 });
-        const matProp = new THREE.MeshStandardMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.4 });
+        const propellers = [];
+
+        // Body
+        const matBody = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 });
+        const matArm = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.5, metalness: 0.3 });
+        const matProp = new THREE.MeshStandardMaterial({ color: 0xdddddd, transparent: true, opacity: 0.6 });
 
         const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.3), matBody);
+        bodyMesh.castShadow = true;
         droneGroup.add(bodyMesh);
 
-        // Arms (X Shape)
+        // Arms (X shape)
         const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.8), matArm);
-        arm1.rotation.y = Math.PI/4;
+        arm1.rotation.y = Math.PI / 4;
+        arm1.castShadow = true;
         const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.8), matArm);
-        arm2.rotation.y = -Math.PI/4;
+        arm2.rotation.y = -Math.PI / 4;
+        arm2.castShadow = true;
         droneGroup.add(arm1);
         droneGroup.add(arm2);
 
-        // Props
-        [
-            {x:-0.6, z:0.6}, {x:0.6, z:-0.6}, 
-            {x:0.6, z:0.6}, {x:-0.6, z:-0.6}
-        ].forEach(pos => {
-            const prop = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.02, 32), matProp);
+        // Propellers
+        const propPositions = [
+            { x: -0.6, z: 0.6 }, { x: 0.6, z: -0.6 },
+            { x: 0.6, z: 0.6 }, { x: -0.6, z: -0.6 }
+        ];
+        propPositions.forEach((pos, i) => {
+            const prop = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.02, 16), matProp);
             prop.position.set(pos.x, 0.08, pos.z);
+            propellers.push(prop);
             droneGroup.add(prop);
         });
 
-        // Axis Helper (Red=X, Green=Y, Blue=Z)
-        droneGroup.add(new THREE.AxesHelper(1));
+        droneGroup.position.copy(physics.position);
         scene.add(droneGroup);
 
-        // Ground Grid
-        const grid = new THREE.GridHelper(30, 30, 0x888888, 0xcccccc);
-        grid.position.y = -2;
-        scene.add(grid);
+        // --- 9. RACE GATES ---
+        const gates = [];
+        const gatePositions = [
+            { x: 0, y: 4, z: 30, ry: 0 },
+            { x: 30, y: 5, z: 60, ry: Math.PI / 4 },
+            { x: 60, y: 3, z: 40, ry: Math.PI / 2 },
+            { x: 70, y: 6, z: 0, ry: Math.PI / 2 },
+            { x: 50, y: 4, z: -40, ry: Math.PI * 0.75 },
+            { x: 0, y: 5, z: -50, ry: Math.PI },
+            { x: -50, y: 3, z: -30, ry: -Math.PI * 0.75 },
+            { x: -60, y: 5, z: 20, ry: -Math.PI / 2 },
+            { x: -30, y: 4, z: 50, ry: -Math.PI / 4 },
+            { x: 0, y: 4, z: 10, ry: 0 }  // Finish/start gate
+        ];
 
-        window.addEventListener('resize', () => {
-            camera.aspect = container.clientWidth / container.clientHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(container.clientWidth, container.clientHeight);
+        function createGate(position, rotationY, index) {
+            const gateGroup = new THREE.Group();
+
+            // Gate dimensions
+            const gateWidth = 6;
+            const gateHeight = 5;
+            const poleRadius = 0.15;
+
+            // Materials
+            const poleMat = new THREE.MeshStandardMaterial({
+                color: index === 0 ? 0xFF4444 : 0x4444FF,
+                roughness: 0.5
+            });
+            const passedMat = new THREE.MeshStandardMaterial({
+                color: 0x44FF44,
+                roughness: 0.5
+            });
+
+            // Poles
+            const poleGeom = new THREE.CylinderGeometry(poleRadius, poleRadius, gateHeight, 8);
+            const leftPole = new THREE.Mesh(poleGeom, poleMat);
+            leftPole.position.set(-gateWidth / 2, gateHeight / 2, 0);
+            leftPole.castShadow = true;
+            gateGroup.add(leftPole);
+
+            const rightPole = new THREE.Mesh(poleGeom, poleMat);
+            rightPole.position.set(gateWidth / 2, gateHeight / 2, 0);
+            rightPole.castShadow = true;
+            gateGroup.add(rightPole);
+
+            // Top bar
+            const topBarGeom = new THREE.CylinderGeometry(poleRadius, poleRadius, gateWidth + 0.3, 8);
+            const topBar = new THREE.Mesh(topBarGeom, poleMat);
+            topBar.rotation.z = Math.PI / 2;
+            topBar.position.set(0, gateHeight, 0);
+            topBar.castShadow = true;
+            gateGroup.add(topBar);
+
+            // Gate number
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = index === 0 ? '#FF4444' : '#4444FF';
+            ctx.fillRect(0, 0, 128, 128);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 80px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(index === 0 ? 'S' : index.toString(), 64, 64);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const numberMat = new THREE.MeshBasicMaterial({ map: texture });
+            const numberGeom = new THREE.PlaneGeometry(1.5, 1.5);
+            const numberMesh = new THREE.Mesh(numberGeom, numberMat);
+            numberMesh.position.set(0, gateHeight + 1, 0);
+            gateGroup.add(numberMesh);
+
+            gateGroup.position.set(position.x, position.y, position.z);
+            gateGroup.rotation.y = rotationY;
+
+            scene.add(gateGroup);
+
+            return {
+                group: gateGroup,
+                position: new THREE.Vector3(position.x, position.y, position.z),
+                forward: new THREE.Vector3(Math.sin(rotationY), 0, Math.cos(rotationY)),
+                width: gateWidth,
+                height: gateHeight,
+                passed: false,
+                poleMat: poleMat,
+                passedMat: passedMat,
+                poles: [leftPole, rightPole, topBar]
+            };
+        }
+
+        gatePositions.forEach((pos, i) => {
+            gates.push(createGate(pos, pos.ry, i));
+        });
+        gameState.totalGates = gates.length;
+
+        // --- 10. DECORATIVE ELEMENTS ---
+        // Start/Finish banner poles
+        const bannerPoleGeom = new THREE.CylinderGeometry(0.2, 0.2, 12, 8);
+        const bannerPoleMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
+
+        const leftBannerPole = new THREE.Mesh(bannerPoleGeom, bannerPoleMat);
+        leftBannerPole.position.set(-8, 6, 5);
+        leftBannerPole.castShadow = true;
+        scene.add(leftBannerPole);
+
+        const rightBannerPole = new THREE.Mesh(bannerPoleGeom, bannerPoleMat);
+        rightBannerPole.position.set(8, 6, 5);
+        rightBannerPole.castShadow = true;
+        scene.add(rightBannerPole);
+
+        // Cones around track
+        const coneMat = new THREE.MeshStandardMaterial({ color: 0xFF6600 });
+        const conePositions = [
+            { x: -15, z: 0 }, { x: 15, z: 0 },
+            { x: 45, z: 60 }, { x: 75, z: 30 },
+            { x: 20, z: -55 }, { x: -20, z: -55 },
+            { x: -70, z: 0 }, { x: -45, z: 60 }
+        ];
+        conePositions.forEach(pos => {
+            const cone = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 8), coneMat);
+            cone.position.set(pos.x, 0.75, pos.z);
+            cone.castShadow = true;
+            scene.add(cone);
         });
 
-        document.getElementById('reset-cam').addEventListener('click', () => {
-            droneGroup.rotation.set(0,0,0);
-            droneGroup.position.set(0,0,0);
+        // --- 11. COLLISION DETECTION ---
+        function checkGroundCollision() {
+            const groundLevel = 0;
+            if (physics.position.y < groundLevel + physics.droneRadius) {
+                const impactSpeed = Math.abs(physics.velocity.y);
+                if (impactSpeed > 3) {
+                    return true; // Crash
+                }
+                // Soft landing - just stop
+                physics.position.y = groundLevel + physics.droneRadius;
+                physics.velocity.y = Math.max(0, physics.velocity.y);
+            }
+            return false;
+        }
+
+        function checkGatePass() {
+            if (gameState.mode !== 'racing') return;
+
+            const nextGateIndex = gameState.currentGate;
+            if (nextGateIndex >= gates.length) return;
+
+            const gate = gates[nextGateIndex];
+            const dronePos = physics.position;
+
+            // Check if drone is near the gate plane
+            const toGate = new THREE.Vector3().subVectors(dronePos, gate.position);
+            const distAlongForward = toGate.dot(gate.forward);
+
+            // Check if crossed the gate plane (from front to back)
+            if (Math.abs(distAlongForward) < 2) {
+                const lateralDist = Math.sqrt(
+                    Math.pow(toGate.x - distAlongForward * gate.forward.x, 2) +
+                    Math.pow(toGate.z - distAlongForward * gate.forward.z, 2)
+                );
+                const heightFromGate = dronePos.y - gate.position.y;
+
+                // Check if within gate bounds
+                if (lateralDist < gate.width / 2 &&
+                    Math.abs(heightFromGate) < gate.height / 2) {
+
+                    // Gate passed!
+                    gate.passed = true;
+                    gate.poles.forEach(pole => pole.material = gate.passedMat);
+                    gameState.currentGate++;
+
+                    updateGateCounter();
+
+                    if (gameState.currentGate >= gates.length) {
+                        // Lap complete!
+                        completeLap();
+                    } else {
+                        showNotification(`Gate ${nextGateIndex + 1} cleared!`);
+                    }
+                }
+            }
+        }
+
+        function checkGateCollision() {
+            // Simplified: check collision with gate poles
+            for (const gate of gates) {
+                const dx = physics.position.x - gate.position.x;
+                const dy = physics.position.y - gate.position.y;
+                const dz = physics.position.z - gate.position.z;
+
+                // Only check if near the gate
+                if (Math.abs(dx) > 5 || Math.abs(dz) > 5) continue;
+
+                // Check pole collision (simplified bounding boxes)
+                const poleRadius = 0.3;
+                const halfWidth = gate.width / 2;
+
+                // Transform drone position to gate local space
+                const cosR = Math.cos(-gate.group.rotation.y);
+                const sinR = Math.sin(-gate.group.rotation.y);
+                const localX = dx * cosR - dz * sinR;
+                const localZ = dx * sinR + dz * cosR;
+
+                // Check left pole
+                if (Math.abs(localX + halfWidth) < poleRadius + physics.droneRadius &&
+                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
+                    dy > 0 && dy < gate.height) {
+                    return true;
+                }
+                // Check right pole
+                if (Math.abs(localX - halfWidth) < poleRadius + physics.droneRadius &&
+                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
+                    dy > 0 && dy < gate.height) {
+                    return true;
+                }
+                // Check top bar
+                if (Math.abs(dy - gate.height) < poleRadius + physics.droneRadius &&
+                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
+                    Math.abs(localX) < halfWidth) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // --- 12. GAME FLOW ---
+        function triggerCrash() {
+            physics.crashed = true;
+            physics.velocity.set(0, 0, 0);
+            gameState.mode = 'crashed';
+            document.getElementById('crash-overlay').style.display = 'flex';
+            showNotification('Crashed! Press R to reset');
+        }
+
+        function resetDrone() {
+            physics.position.copy(spawnPoint);
+            physics.velocity.set(0, 0, 0);
+            physics.crashed = false;
+            droneGroup.rotation.set(0, 0, 0);
+            droneGroup.position.copy(spawnPoint);
+
+            document.getElementById('crash-overlay').style.display = 'none';
+
+            if (gameState.mode === 'crashed' || gameState.mode === 'racing') {
+                gameState.mode = 'freefly';
+                gameState.currentGate = 0;
+                document.getElementById('race-info').style.display = 'none';
+
+                // Reset gate colors
+                gates.forEach(gate => {
+                    gate.passed = false;
+                    gate.poles.forEach(pole => pole.material = gate.poleMat);
+                });
+            }
+
+            showNotification('Drone reset');
+        }
+
+        function startRace() {
+            if (gameState.mode !== 'freefly') return;
+
+            resetDrone();
+            gameState.mode = 'countdown';
+
+            const countdownOverlay = document.getElementById('countdown-overlay');
+            const countdownText = document.getElementById('countdown-text');
+            countdownOverlay.style.display = 'flex';
+
+            let count = 3;
+            countdownText.textContent = count;
+
+            const countdownInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownText.textContent = count;
+                } else if (count === 0) {
+                    countdownText.textContent = 'GO!';
+                } else {
+                    clearInterval(countdownInterval);
+                    countdownOverlay.style.display = 'none';
+                    gameState.mode = 'racing';
+                    gameState.raceStartTime = performance.now();
+                    gameState.currentGate = 0;
+                    document.getElementById('race-info').style.display = 'block';
+                    updateGateCounter();
+                }
+            }, 1000);
+        }
+
+        function completeLap() {
+            const lapTime = (performance.now() - gameState.raceStartTime) / 1000;
+            gameState.lapTimes.push(lapTime);
+
+            if (!gameState.bestLap || lapTime < gameState.bestLap) {
+                gameState.bestLap = lapTime;
+                localStorage.setItem('fpv_best_lap', lapTime.toString());
+                showNotification(`New best lap: ${formatTime(lapTime)}!`);
+            } else {
+                showNotification(`Lap complete: ${formatTime(lapTime)}`);
+            }
+
+            // Reset for next lap
+            gameState.mode = 'freefly';
+            gameState.currentGate = 0;
+            document.getElementById('race-info').style.display = 'none';
+
+            gates.forEach(gate => {
+                gate.passed = false;
+                gate.poles.forEach(pole => pole.material = gate.poleMat);
+            });
+
+            updateBestLap();
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 1000);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+        }
+
+        function updateGateCounter() {
+            document.getElementById('gate-counter').textContent =
+                `Gate ${gameState.currentGate} / ${gameState.totalGates}`;
+        }
+
+        function updateBestLap() {
+            const bestLapEl = document.getElementById('best-lap');
+            bestLapEl.textContent = gameState.bestLap ? formatTime(gameState.bestLap) : '--:--';
+        }
+
+        // --- 13. BETAFLIGHT ACTUAL RATES ---
+        function calculateActualRate(input, centerSens, maxRate, expo) {
+            const deflection = Math.abs(input);
+            if (deflection < 0.02) return 0;
+
+            const s = centerSens;
+            const m = maxRate;
+            const e = expo;
+
+            const curve = Math.pow(deflection, 1 + (e * 3));
+            const rateMag = s + (m - s) * curve;
+
+            return (deflection * rateMag) * Math.sign(input);
+        }
+
+        // --- 14. PHYSICS UPDATE ---
+        function updatePhysics(dt, rawRoll, rawPitch, rawYaw, rawThrottle) {
+            if (physics.crashed) return;
+
+            // Clamp dt to prevent explosion on tab switch
+            dt = Math.min(dt, 0.05);
+
+            // Get rate values from UI
+            const rC = parseFloat(document.getElementById('roll-center').value);
+            const rM = parseFloat(document.getElementById('roll-max').value);
+            const rE = parseFloat(document.getElementById('roll-expo').value);
+            const pC = parseFloat(document.getElementById('pitch-center').value);
+            const pM = parseFloat(document.getElementById('pitch-max').value);
+            const pE = parseFloat(document.getElementById('pitch-expo').value);
+            const yC = parseFloat(document.getElementById('yaw-center').value);
+            const yM = parseFloat(document.getElementById('yaw-max').value);
+            const yE = parseFloat(document.getElementById('yaw-expo').value);
+
+            // Calculate rotation rates
+            const rollRate = calculateActualRate(rawRoll, rC, rM, rE);
+            const pitchRate = calculateActualRate(rawPitch, pC, pM, pE);
+            const yawRate = calculateActualRate(rawYaw, yC, yM, yE);
+
+            // Apply rotations (in drone's local frame)
+            droneGroup.rotateX(THREE.MathUtils.degToRad(pitchRate * dt));
+            droneGroup.rotateY(THREE.MathUtils.degToRad(yawRate * dt));
+            droneGroup.rotateZ(THREE.MathUtils.degToRad(-rollRate * dt));
+
+            // Calculate thrust (throttle 0-1 mapped from -1 to 1 input)
+            const throttle01 = (rawThrottle + 1) / 2;
+            const thrustMagnitude = throttle01 * physics.maxThrust;
+
+            // Get drone's up vector (local Y in world space)
+            const thrustDir = new THREE.Vector3(0, 1, 0);
+            thrustDir.applyQuaternion(droneGroup.quaternion);
+
+            // Apply thrust
+            const thrust = thrustDir.multiplyScalar(thrustMagnitude);
+
+            // Acceleration = thrust/mass - gravity
+            const acceleration = new THREE.Vector3(
+                thrust.x,
+                thrust.y - physics.gravity,
+                thrust.z
+            );
+
+            // Update velocity
+            physics.velocity.add(acceleration.multiplyScalar(dt));
+
+            // Apply drag
+            const dragFactor = 1 - physics.dragCoeff * dt;
+            physics.velocity.multiplyScalar(dragFactor);
+
+            // Update position
+            physics.position.add(physics.velocity.clone().multiplyScalar(dt));
+
+            // Bounds check
+            const bound = groundSize / 2 - 10;
+            physics.position.x = THREE.MathUtils.clamp(physics.position.x, -bound, bound);
+            physics.position.z = THREE.MathUtils.clamp(physics.position.z, -bound, bound);
+            physics.position.y = Math.max(physics.position.y, physics.droneRadius);
+
+            // Sync drone group position
+            droneGroup.position.copy(physics.position);
+
+            // Check collisions
+            if (checkGroundCollision()) {
+                triggerCrash();
+                return;
+            }
+
+            if (checkGateCollision()) {
+                triggerCrash();
+                return;
+            }
+
+            checkGatePass();
+        }
+
+        // --- 15. CAMERA UPDATE ---
+        function updateCamera(dt) {
+            // Get drone's yaw rotation only (for camera following)
+            const droneYaw = droneGroup.rotation.y;
+
+            // Calculate target camera position (behind and above drone)
+            const offset = cameraController.offset.clone();
+            offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), droneYaw);
+
+            const targetPos = physics.position.clone().add(offset);
+
+            // Smooth camera movement
+            cameraController.currentPos.lerp(targetPos, cameraController.smoothing * dt);
+
+            // Look at drone with some smoothing
+            const targetLookAt = physics.position.clone();
+            targetLookAt.y += 1; // Look slightly above drone center
+            cameraController.currentLookAt.lerp(targetLookAt, cameraController.smoothing * dt);
+
+            camera.position.copy(cameraController.currentPos);
+            camera.lookAt(cameraController.currentLookAt);
+        }
+
+        // --- 16. HUD UPDATE ---
+        function updateHUD(throttle01) {
+            const speed = physics.velocity.length();
+            const alt = physics.position.y;
+
+            document.getElementById('hud-speed').textContent = speed.toFixed(1);
+            document.getElementById('hud-alt').textContent = alt.toFixed(1);
+            document.getElementById('hud-throttle').textContent = Math.round(throttle01 * 100);
+
+            if (gameState.mode === 'racing') {
+                const elapsed = (performance.now() - gameState.raceStartTime) / 1000;
+                document.getElementById('race-time').textContent = formatTime(elapsed);
+            }
+        }
+
+        // --- 17. PROP ANIMATION ---
+        function animateProps(throttle01) {
+            const spinSpeed = throttle01 * 50;
+            propellers.forEach((prop, i) => {
+                prop.rotation.y += spinSpeed * (i % 2 === 0 ? 1 : -1) * 0.1;
+            });
+        }
+
+        // --- 18. INPUT HANDLING ---
+        let activeGamepadIndex = null;
+
+        window.addEventListener("gamepadconnected", (e) => {
+            activeGamepadIndex = e.gamepad.index;
+            showNotification(`Connected: ${e.gamepad.id}`);
+        });
+        window.addEventListener("gamepaddisconnected", () => {
+            activeGamepadIndex = null;
+            showNotification("Controller disconnected");
         });
 
-        // --- 4. CONTROLLER MAPPING UI LOGIC ---
+        // Keyboard controls
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyR') {
+                resetDrone();
+            } else if (e.code === 'Space' || e.code === 'Enter') {
+                if (gameState.mode === 'freefly') {
+                    startRace();
+                }
+            } else if (e.code === 'Escape') {
+                if (gameState.mode === 'racing') {
+                    gameState.mode = 'freefly';
+                    document.getElementById('race-info').style.display = 'none';
+                    showNotification('Race cancelled');
+                }
+            }
+        });
+
+        // Mode buttons
+        document.getElementById('mode-freefly').addEventListener('click', () => {
+            document.getElementById('mode-freefly').classList.add('active');
+            document.getElementById('mode-race').classList.remove('active');
+            if (gameState.mode === 'racing') {
+                gameState.mode = 'freefly';
+                document.getElementById('race-info').style.display = 'none';
+            }
+        });
+
+        document.getElementById('mode-race').addEventListener('click', () => {
+            document.getElementById('mode-race').classList.add('active');
+            document.getElementById('mode-freefly').classList.remove('active');
+            startRace();
+        });
+
+        // Reset button
+        document.getElementById('reset-cam').addEventListener('click', resetDrone);
+
+        // --- 19. CONTROLLER MAPPING UI ---
         const modal = document.getElementById('mapping-modal');
         const rowsContainer = document.getElementById('mapping-rows');
         const functions = ['Roll', 'Pitch', 'Yaw', 'Throttle'];
-        
-        let activeGamepadIndex = null;
 
         document.getElementById('open-mapping').addEventListener('click', () => {
             if (activeGamepadIndex === null) {
@@ -371,12 +1106,12 @@
         document.getElementById('close-mapping').addEventListener('click', () => {
             modal.style.display = 'none';
             saveConfig();
-            showNotification("Mapping Saved");
+            showNotification("Mapping saved");
         });
 
         function renderMappingUI() {
             rowsContainer.innerHTML = '';
-            
+
             functions.forEach(func => {
                 const key = func.toLowerCase();
                 const setting = config.mapping[key];
@@ -384,24 +1119,21 @@
                 const row = document.createElement('div');
                 row.className = 'map-row';
 
-                // Label
                 const label = document.createElement('div');
                 label.className = 'map-label';
                 label.innerText = func;
-                
-                // Select Axis
+
                 const select = document.createElement('select');
                 select.className = 'map-select';
-                for(let i=0; i<8; i++) {
+                for (let i = 0; i < 8; i++) {
                     const opt = document.createElement('option');
                     opt.value = i;
                     opt.innerText = `Axis ${i}`;
-                    if(i === setting.axis) opt.selected = true;
+                    if (i === setting.axis) opt.selected = true;
                     select.appendChild(opt);
                 }
                 select.onchange = (e) => config.mapping[key].axis = parseInt(e.target.value);
 
-                // Invert Checkbox
                 const invertDiv = document.createElement('div');
                 invertDiv.className = 'map-invert';
                 const chk = document.createElement('input');
@@ -411,12 +1143,11 @@
                 invertDiv.appendChild(chk);
                 invertDiv.appendChild(document.createTextNode('Inv'));
 
-                // Live Visualizer
                 const viz = document.createElement('div');
                 viz.className = 'axis-viz';
                 const bar = document.createElement('div');
                 bar.className = 'axis-bar';
-                bar.id = `viz-${key}`; // ID for animation loop update
+                bar.id = `viz-${key}`;
                 viz.appendChild(bar);
 
                 row.appendChild(label);
@@ -427,43 +1158,26 @@
             });
         }
 
-        // --- 5. ACTUAL RATES MATH ---
-        function calculateActualRate(input, centerSens, maxRate, expo) {
-            const deflection = Math.abs(input);
-            if (deflection < 0.02) return 0; // deadband
-            
-            const s = centerSens;
-            const m = maxRate;
-            const e = expo;
-            
-            // Betaflight-ish curve approximation for visual smoothness
-            const curve = Math.pow(deflection, 1 + (e * 3));
-            const rateMag = s + (m - s) * curve;
-            
-            return (deflection * rateMag) * Math.sign(input);
-        }
-
-        // --- 6. MAIN LOOP ---
-        window.addEventListener("gamepadconnected", (e) => {
-            activeGamepadIndex = e.gamepad.index;
-            showNotification(`Connected: ${e.gamepad.id}`);
-        });
-        window.addEventListener("gamepaddisconnected", () => {
-            activeGamepadIndex = null;
-            showNotification("Disconnected");
+        // --- 20. WINDOW RESIZE ---
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
         });
 
+        // --- 21. MAIN ANIMATION LOOP ---
         const clock = new THREE.Clock();
+        updateBestLap();
 
         function animate() {
             requestAnimationFrame(animate);
             const dt = clock.getDelta();
 
+            let rawRoll = 0, rawPitch = 0, rawYaw = 0, rawThrottle = -1;
+
             if (activeGamepadIndex !== null) {
                 const gp = navigator.getGamepads()[activeGamepadIndex];
                 if (gp) {
-                    
-                    // 1. READ RAW AXES BASED ON MAPPING
                     const getAxisVal = (name) => {
                         const map = config.mapping[name];
                         let val = gp.axes[map.axis] || 0;
@@ -471,18 +1185,16 @@
                         return val;
                     };
 
-                    const rawRoll = getAxisVal('roll');
-                    const rawPitch = getAxisVal('pitch');
-                    const rawYaw = getAxisVal('yaw');
-                    const rawThr = getAxisVal('throttle');
+                    rawRoll = getAxisVal('roll');
+                    rawPitch = getAxisVal('pitch');
+                    rawYaw = getAxisVal('yaw');
+                    rawThrottle = getAxisVal('throttle');
 
-                    // 2. UPDATE MAPPING MENU VISUALIZERS (If open)
-                    if(modal.style.display === 'flex') {
+                    // Update mapping visualizers if modal is open
+                    if (modal.style.display === 'flex') {
                         const updateViz = (name, val) => {
                             const bar = document.getElementById(`viz-${name}`);
-                            if(bar) {
-                                // Map -1..1 to 0..100%
-                                // Center (0) = 50%
+                            if (bar) {
                                 const pct = (val + 1) * 50;
                                 bar.style.left = val < 0 ? `${pct}%` : '50%';
                                 bar.style.width = `${Math.abs(val) * 50}%`;
@@ -491,39 +1203,20 @@
                         updateViz('roll', rawRoll);
                         updateViz('pitch', rawPitch);
                         updateViz('yaw', rawYaw);
-                        updateViz('throttle', rawThr);
+                        updateViz('throttle', rawThrottle);
                     }
-
-                    // 3. APPLY RATES
-                    const rC = parseFloat(document.getElementById('roll-center').value);
-                    const rM = parseFloat(document.getElementById('roll-max').value);
-                    const rE = parseFloat(document.getElementById('roll-expo').value);
-
-                    const pC = parseFloat(document.getElementById('pitch-center').value);
-                    const pM = parseFloat(document.getElementById('pitch-max').value);
-                    const pE = parseFloat(document.getElementById('pitch-expo').value);
-
-                    const yC = parseFloat(document.getElementById('yaw-center').value);
-                    const yM = parseFloat(document.getElementById('yaw-max').value);
-                    const yE = parseFloat(document.getElementById('yaw-expo').value);
-
-                    const rollRate = calculateActualRate(rawRoll, rC, rM, rE);
-                    const pitchRate = calculateActualRate(rawPitch, pC, pM, pE);
-                    const yawRate = calculateActualRate(rawYaw, yC, yM, yE);
-
-                    // 4. APPLY ROTATION
-                    // Pitch (X axis), Yaw (Y axis), Roll (Z axis)
-                    droneGroup.rotateX(THREE.Math.degToRad(pitchRate * dt));
-                    droneGroup.rotateY(THREE.Math.degToRad(yawRate * dt)); 
-                    droneGroup.rotateZ(THREE.Math.degToRad(-rollRate * dt)); // Roll usually inverted visually
-
-                    // 5. THROTTLE PHYSICS (Floating)
-                    // Map throttle (-1 to 1) to Height (-1.5 to 1.5)
-                    const targetY = rawThr * 2.0; 
-                    // Smooth lerp
-                    droneGroup.position.y += (targetY - droneGroup.position.y) * 5 * dt;
                 }
             }
+
+            // Update systems
+            if (gameState.mode !== 'countdown') {
+                updatePhysics(dt, rawRoll, rawPitch, rawYaw, rawThrottle);
+            }
+            updateCamera(dt);
+
+            const throttle01 = (rawThrottle + 1) / 2;
+            updateHUD(throttle01);
+            animateProps(throttle01);
 
             renderer.render(scene, camera);
         }
