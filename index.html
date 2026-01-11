@@ -454,10 +454,10 @@
 
         // --- 4. CAMERA CONTROLLER ---
         const cameraController = {
-            offset: new THREE.Vector3(0, 3, -8),
-            smoothing: 4.0,
-            currentPos: new THREE.Vector3(0, 8, -12),
-            currentLookAt: new THREE.Vector3(0, 5, 0)
+            offset: new THREE.Vector3(0, 0.15, 0.1),  // Slightly above and behind drone center (FPV position)
+            smoothing: 50.0,  // High smoothing for tight FPV feel
+            currentPos: new THREE.Vector3(0, 5, 0),
+            currentLookAt: new THREE.Vector3(0, 5, 10)
         };
 
         // --- 5. THEME & UI ---
@@ -997,25 +997,22 @@
 
         // --- 15. CAMERA UPDATE ---
         function updateCamera(dt) {
-            // Fixed third-person camera - stays behind drone regardless of orientation
-            // Camera offset in drone's local space
+            // First-person FPV camera - mounted on drone, looking forward
+
+            // Camera position in drone's local space (on top of the body)
             const localOffset = cameraController.offset.clone();
-
-            // Transform offset by drone's full rotation (follows all axes)
             localOffset.applyQuaternion(droneGroup.quaternion);
-
-            // Target position is drone position + rotated offset
             const targetPos = physics.position.clone().add(localOffset);
 
-            // Smooth camera movement
-            cameraController.currentPos.lerp(targetPos, cameraController.smoothing * dt);
+            // Look-at point far ahead in drone's forward direction (local +Z)
+            const forwardLocal = new THREE.Vector3(0, 0, 100);
+            forwardLocal.applyQuaternion(droneGroup.quaternion);
+            const targetLookAt = physics.position.clone().add(forwardLocal);
 
-            // Look at point slightly in front of drone (in drone's local forward direction)
-            const lookAheadLocal = new THREE.Vector3(0, 0, 5); // Look ahead in drone's Z direction
-            lookAheadLocal.applyQuaternion(droneGroup.quaternion);
-            const targetLookAt = physics.position.clone().add(lookAheadLocal);
-
-            cameraController.currentLookAt.lerp(targetLookAt, cameraController.smoothing * dt);
+            // Apply with high responsiveness for FPV feel
+            const lerpFactor = Math.min(1, cameraController.smoothing * dt);
+            cameraController.currentPos.lerp(targetPos, lerpFactor);
+            cameraController.currentLookAt.lerp(targetLookAt, lerpFactor);
 
             camera.position.copy(cameraController.currentPos);
             camera.lookAt(cameraController.currentLookAt);
