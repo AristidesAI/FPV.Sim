@@ -440,7 +440,7 @@
             droneRadius: 0.5
         };
 
-        const spawnPoint = new THREE.Vector3(0, 5, -120);  // Start in open area south of city
+        const spawnPoint = new THREE.Vector3(0, 5, -120);  // Start in clearing in the forest
 
         // Thrust works like real acro:
         // - Thrust vector points "up" from the drone's perspective
@@ -739,775 +739,46 @@
         // --- 9. GATES REMOVED - FREE FLIGHT MODE ---
         const gates = [];  // Empty for compatibility
 
-        // --- 10. CITY AND ENVIRONMENT ---
+        // --- 10. GREEN SPACE ENVIRONMENT ---
         const buildings = [];
         const trees = [];
+        const treePositions = [];  // Track all tree positions to prevent overlap
 
-        // ============================================
-        // CITY AREA - NEW YORK STYLE GRID SYSTEM
-        // ============================================
+        // Minimum spacing between trees
+        const minTreeSpacing = 4;
 
-        // City configuration
-        const cityConfig = {
-            blocksX: 5,           // 5x5 grid = ~20x20 blocks area
-            blocksZ: 5,
-            blockSize: 35,        // Size of each block
-            mainRoadWidth: 14,    // Two-way roads with barrier
-            sideRoadWidth: 8,     // Single two-way roads
-            sidewalkWidth: 3,
-            greenGapWidth: 2,
-            droneGap: 3           // Minimum gap between buildings for flying
-        };
+        // Helper function to check if a tree can be placed without overlapping
+        function canPlaceTree(x, z, radius) {
+            // Skip train track area
+            if (z > trackZ - 8 && z < trackZ + 8) return false;
 
-        // Materials
-        const roofMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.9 });
-        const streetMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9 });
-        const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.7 });
-        const greenGapMat = new THREE.MeshStandardMaterial({ color: 0x3d6b3d, roughness: 0.9 });
-        const barrierMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
-        const yellowLineMat = new THREE.MeshStandardMaterial({ color: 0xffdd00 });
-        const whiteLineMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-
-        // Building colors - all slightly different
-        const buildingColors = [
-            0x8b7355, 0x9c8b7a, 0x7a6b5a, 0xa09080, 0x6b5b4a,  // Browns/tans
-            0x708090, 0x778899, 0x696969, 0x808080, 0x5f6a6a,  // Grays/slates
-            0xb8a090, 0xc4b8a8, 0xd4c8b8, 0xa89888, 0x987858,  // Beiges
-            0x4a5568, 0x5a6578, 0x6a7588, 0x7a8598, 0x8a95a8   // Blue-grays
-        ];
-
-        // Hotel/Building names
-        const buildingNames = [
-            "WALDORF", "RITZ", "PLAZA", "GRAND", "ROYAL", "IMPERIAL",
-            "CARLTON", "SAVOY", "MAJESTIC", "REGENT", "CROWN", "PALACE",
-            "ASTORIA", "BRISTOL", "CLARIDGE", "DORCHESTER", "EXCELSIOR"
-        ];
-        let nameIndex = 0;
-
-        // Window colors
-        const windowColors = [0x88ccff, 0x99ddff, 0xaaddee, 0x77bbee, 0x66aadd];
-
-        // Super tower glass material
-        const superGlassMat = new THREE.MeshStandardMaterial({
-            color: 0x88ddff,
-            roughness: 0.05,
-            metalness: 0.95,
-            transparent: true,
-            opacity: 0.9
-        });
-
-        // Create a named building with roof elements
-        function createCityBuilding(x, z, width, depth, height, colorIndex, hasWindows = true) {
-            const buildingGroup = new THREE.Group();
-            const color = buildingColors[colorIndex % buildingColors.length];
-            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.7 });
-
-            // Main structure
-            const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
-            building.position.y = height / 2;
-            building.castShadow = true;
-            building.receiveShadow = true;
-            buildingGroup.add(building);
-
-            // Windows with varying sizes and colors
-            if (hasWindows && height > 10) {
-                const windowColor = windowColors[Math.floor(Math.random() * windowColors.length)];
-                const windowMat = new THREE.MeshStandardMaterial({
-                    color: windowColor,
-                    roughness: 0.1,
-                    metalness: 0.9
-                });
-                const windowWidth = 1.2 + Math.random() * 0.8;
-                const windowHeight = 1.8 + Math.random() * 0.6;
-                const windowSpacingX = windowWidth + 1.5 + Math.random();
-                const windowSpacingY = windowHeight + 1.5 + Math.random();
-
-                const windowRows = Math.floor((height - 4) / windowSpacingY);
-                const windowColsFront = Math.floor((width - 2) / windowSpacingX);
-                const windowColsSide = Math.floor((depth - 2) / windowSpacingX);
-
-                // Front and back windows
-                for (let row = 0; row < windowRows; row++) {
-                    for (let col = 0; col < windowColsFront; col++) {
-                        const windowMesh = new THREE.Mesh(
-                            new THREE.PlaneGeometry(windowWidth, windowHeight),
-                            windowMat
-                        );
-                        windowMesh.position.set(
-                            -width/2 + 1.5 + col * windowSpacingX,
-                            3 + row * windowSpacingY,
-                            depth/2 + 0.05
-                        );
-                        buildingGroup.add(windowMesh);
-
-                        const backWindow = windowMesh.clone();
-                        backWindow.position.z = -depth/2 - 0.05;
-                        backWindow.rotation.y = Math.PI;
-                        buildingGroup.add(backWindow);
-                    }
-                }
-
-                // Side windows
-                for (let row = 0; row < windowRows; row++) {
-                    for (let col = 0; col < windowColsSide; col++) {
-                        const windowMesh = new THREE.Mesh(
-                            new THREE.PlaneGeometry(windowWidth, windowHeight),
-                            windowMat
-                        );
-                        windowMesh.rotation.y = Math.PI / 2;
-                        windowMesh.position.set(
-                            width/2 + 0.05,
-                            3 + row * windowSpacingY,
-                            -depth/2 + 1.5 + col * windowSpacingX
-                        );
-                        buildingGroup.add(windowMesh);
-
-                        const otherSide = windowMesh.clone();
-                        otherSide.position.x = -width/2 - 0.05;
-                        otherSide.rotation.y = -Math.PI / 2;
-                        buildingGroup.add(otherSide);
-                    }
+            // Check against all existing trees
+            for (const t of treePositions) {
+                const dx = x - t.x;
+                const dz = z - t.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < radius + t.radius + minTreeSpacing) {
+                    return false;
                 }
             }
-
-            // Roof access door (always add for logic)
-            const doorMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
-            const roofDoor = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 2), doorMat);
-            roofDoor.position.set(0, height + 1.5, 0);
-            roofDoor.castShadow = true;
-            buildingGroup.add(roofDoor);
-
-            // Random roof elements
-            const roofElement = Math.floor(Math.random() * 5);
-            const metalMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.8, roughness: 0.3 });
-
-            if (roofElement === 0 && width > 10 && depth > 10) {
-                // AC units
-                for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) {
-                    const ac = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), metalMat);
-                    ac.position.set(
-                        (Math.random() - 0.5) * (width - 4),
-                        height + 0.75,
-                        (Math.random() - 0.5) * (depth - 4)
-                    );
-                    buildingGroup.add(ac);
-                }
-            } else if (roofElement === 1) {
-                // Antenna
-                const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 8, 8), metalMat);
-                antenna.position.set(width/4, height + 4, depth/4);
-                buildingGroup.add(antenna);
-            } else if (roofElement === 2 && width > 12 && depth > 12) {
-                // Helipad
-                const helipadMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-                const helipad = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 0.2, 16), helipadMat);
-                helipad.position.set(0, height + 0.1, 0);
-                buildingGroup.add(helipad);
-                // H marking
-                const hMat = new THREE.MeshStandardMaterial({ color: 0xffff00 });
-                const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 2.5), hMat);
-                hBar.position.set(0, height + 0.25, 0);
-                buildingGroup.add(hBar);
-            } else if (roofElement === 3) {
-                // Telescope/observatory dome
-                const dome = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), metalMat);
-                dome.position.set(0, height, 0);
-                buildingGroup.add(dome);
-            } else {
-                // Water tank
-                const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 3, 12), metalMat);
-                tank.position.set(width/3, height + 1.5, -depth/3);
-                buildingGroup.add(tank);
-            }
-
-            // Building name sign
-            const name = buildingNames[nameIndex % buildingNames.length];
-            nameIndex++;
-
-            buildingGroup.position.set(x, 0, z);
-            scene.add(buildingGroup);
-
-            return {
-                position: new THREE.Vector3(x, 0, z),
-                width: width,
-                depth: depth,
-                height: height
-            };
+            return true;
         }
 
-        // Create the Super Tower (111 West 57th Street style)
-        function createSuperTower(x, z) {
-            const buildingGroup = new THREE.Group();
-            const towerWidth = 12;
-            const towerDepth = 12;
-            const towerHeight = 180;
-
-            // Main glass tower
-            const tower = new THREE.Mesh(
-                new THREE.BoxGeometry(towerWidth, towerHeight, towerDepth),
-                superGlassMat
-            );
-            tower.position.y = towerHeight / 2;
-            tower.castShadow = true;
-            buildingGroup.add(tower);
-
-            // Window grid lines (dark frames)
-            const frameMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-
-            // Vertical frames
-            for (let i = -towerWidth/2 + 2; i <= towerWidth/2 - 2; i += 2) {
-                const vFrame = new THREE.Mesh(new THREE.BoxGeometry(0.1, towerHeight, 0.2), frameMat);
-                vFrame.position.set(i, towerHeight/2, towerDepth/2 + 0.1);
-                buildingGroup.add(vFrame);
-                const vFrameBack = vFrame.clone();
-                vFrameBack.position.z = -towerDepth/2 - 0.1;
-                buildingGroup.add(vFrameBack);
-            }
-
-            // Horizontal frames
-            for (let h = 4; h < towerHeight; h += 4) {
-                const hFrame = new THREE.Mesh(new THREE.BoxGeometry(towerWidth + 0.2, 0.1, 0.2), frameMat);
-                hFrame.position.set(0, h, towerDepth/2 + 0.1);
-                buildingGroup.add(hFrame);
-                const hFrameBack = hFrame.clone();
-                hFrameBack.position.z = -towerDepth/2 - 0.1;
-                buildingGroup.add(hFrameBack);
-            }
-
-            // Spire on top
-            const spire = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.3, 1, 20, 8),
-                new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9 })
-            );
-            spire.position.y = towerHeight + 10;
-            buildingGroup.add(spire);
-
-            // Roof access
-            const doorMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-            const roofDoor = new THREE.Mesh(new THREE.BoxGeometry(3, 4, 3), doorMat);
-            roofDoor.position.set(3, towerHeight + 2, 3);
-            buildingGroup.add(roofDoor);
-
-            buildingGroup.position.set(x, 0, z);
-            scene.add(buildingGroup);
-
-            return {
-                position: new THREE.Vector3(x, 0, z),
-                width: towerWidth,
-                depth: towerDepth,
-                height: towerHeight + 20
-            };
+        function registerTree(x, z, radius) {
+            treePositions.push({ x, z, radius });
         }
 
-        // Create petrol station
-        function createPetrolStation(x, z) {
-            const group = new THREE.Group();
+        // Train track Z position (used for tree avoidance)
+        const trackZ = 90;
 
-            // Base platform
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
-            const base = new THREE.Mesh(new THREE.BoxGeometry(20, 0.3, 15), baseMat);
-            base.position.y = 0.15;
-            group.add(base);
+        // Glass material (keeping for compatibility)
+        const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1, metalness: 0.9 });
 
-            // Canopy (loopable roof)
-            const canopyMat = new THREE.MeshStandardMaterial({ color: 0xdd0000 });
-            const canopy = new THREE.Mesh(new THREE.BoxGeometry(18, 0.5, 12), canopyMat);
-            canopy.position.y = 5;
-            group.add(canopy);
-
-            // Canopy supports
-            const supportMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8 });
-            const supportPositions = [[-7, 4], [7, 4], [-7, -4], [7, -4]];
-            supportPositions.forEach(([sx, sz]) => {
-                const support = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 5, 8), supportMat);
-                support.position.set(sx, 2.5, sz);
-                group.add(support);
-            });
-
-            // Fuel pumps
-            const pumpMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
-            for (let i = -1; i <= 1; i += 2) {
-                const pump = new THREE.Mesh(new THREE.BoxGeometry(1, 2.5, 0.8), pumpMat);
-                pump.position.set(i * 4, 1.25, 0);
-                group.add(pump);
-            }
-
-            // Small shop building
-            const shopMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-            const shop = new THREE.Mesh(new THREE.BoxGeometry(8, 4, 6), shopMat);
-            shop.position.set(0, 2, -7);
-            group.add(shop);
-
-            group.position.set(x, 0, z);
-            scene.add(group);
-
-            return { position: new THREE.Vector3(x, 0, z), width: 20, depth: 15, height: 5.5 };
-        }
-
-        // Create church
-        function createChurch(x, z) {
-            const group = new THREE.Group();
-            const churchMat = new THREE.MeshStandardMaterial({ color: 0xd4c8b8 });
-            const roofChurchMat = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
-
-            // Main building
-            const main = new THREE.Mesh(new THREE.BoxGeometry(12, 10, 20), churchMat);
-            main.position.y = 5;
-            main.castShadow = true;
-            group.add(main);
-
-            // Roof
-            const roof = new THREE.Mesh(
-                new THREE.ConeGeometry(10, 5, 4),
-                roofChurchMat
-            );
-            roof.rotation.y = Math.PI / 4;
-            roof.position.y = 12.5;
-            group.add(roof);
-
-            // Bell tower
-            const tower = new THREE.Mesh(new THREE.BoxGeometry(5, 20, 5), churchMat);
-            tower.position.set(0, 10, -10);
-            tower.castShadow = true;
-            group.add(tower);
-
-            // Steeple
-            const steeple = new THREE.Mesh(new THREE.ConeGeometry(3.5, 8, 4), roofChurchMat);
-            steeple.rotation.y = Math.PI / 4;
-            steeple.position.set(0, 24, -10);
-            group.add(steeple);
-
-            // Cross
-            const crossMat = new THREE.MeshStandardMaterial({ color: 0xffd700 });
-            const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3, 0.3), crossMat);
-            crossV.position.set(0, 29.5, -10);
-            group.add(crossV);
-            const crossH = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 0.3), crossMat);
-            crossH.position.set(0, 30, -10);
-            group.add(crossH);
-
-            // Stained glass windows
-            const glassMat = new THREE.MeshStandardMaterial({ color: 0x8844aa, roughness: 0.2 });
-            for (let i = -1; i <= 1; i++) {
-                const window = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 4), glassMat);
-                window.position.set(6.05, 5, i * 5);
-                window.rotation.y = Math.PI / 2;
-                group.add(window);
-            }
-
-            group.position.set(x, 0, z);
-            scene.add(group);
-
-            return { position: new THREE.Vector3(x, 0, z), width: 12, depth: 25, height: 32 };
-        }
-
-        // Create construction site
-        function createConstructionSite(x, z) {
-            const group = new THREE.Group();
-
-            // Unfinished building frame
-            const frameMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 });
-            const concreteMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
-
-            // Concrete floors
-            for (let floor = 0; floor < 5; floor++) {
-                const slab = new THREE.Mesh(new THREE.BoxGeometry(18, 0.5, 18), concreteMat);
-                slab.position.y = floor * 4 + 0.25;
-                group.add(slab);
-            }
-
-            // Steel frame columns
-            const columnPositions = [[-8, -8], [-8, 8], [8, -8], [8, 8], [0, -8], [0, 8], [-8, 0], [8, 0]];
-            columnPositions.forEach(([cx, cz]) => {
-                const column = new THREE.Mesh(new THREE.BoxGeometry(0.8, 20, 0.8), frameMat);
-                column.position.set(cx, 10, cz);
-                group.add(column);
-            });
-
-            // Tower crane
-            const craneMat = new THREE.MeshStandardMaterial({ color: 0xffcc00 });
-
-            // Crane tower
-            const craneTower = new THREE.Mesh(new THREE.BoxGeometry(2, 35, 2), craneMat);
-            craneTower.position.set(-12, 17.5, -12);
-            group.add(craneTower);
-
-            // Crane arm
-            const craneArm = new THREE.Mesh(new THREE.BoxGeometry(30, 1, 1), craneMat);
-            craneArm.position.set(-12 + 10, 35, -12);
-            group.add(craneArm);
-
-            // Counter weight arm
-            const counterArm = new THREE.Mesh(new THREE.BoxGeometry(10, 1, 1), craneMat);
-            counterArm.position.set(-12 - 7, 35, -12);
-            group.add(counterArm);
-
-            // Counter weight
-            const weight = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 2), new THREE.MeshStandardMaterial({ color: 0x333333 }));
-            weight.position.set(-12 - 10, 33.5, -12);
-            group.add(weight);
-
-            // Safety fence
-            const fenceMat = new THREE.MeshStandardMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
-            const fencePositions = [
-                { x: 0, z: 11, rx: 0, ry: 0, w: 24 },
-                { x: 0, z: -11, rx: 0, ry: 0, w: 24 },
-                { x: 11, z: 0, rx: 0, ry: Math.PI/2, w: 22 },
-                { x: -11, z: 0, rx: 0, ry: Math.PI/2, w: 22 }
-            ];
-            fencePositions.forEach(fp => {
-                const fence = new THREE.Mesh(new THREE.PlaneGeometry(fp.w, 2.5), fenceMat);
-                fence.position.set(fp.x, 1.25, fp.z);
-                fence.rotation.y = fp.ry;
-                group.add(fence);
-            });
-
-            group.position.set(x, 0, z);
-            scene.add(group);
-
-            return { position: new THREE.Vector3(x, 0, z), width: 24, depth: 24, height: 36 };
-        }
-
-        // Create mini park
-        function createMiniPark(x, z) {
-            const group = new THREE.Group();
-
-            // Grass ground
-            const parkGrass = new THREE.Mesh(
-                new THREE.PlaneGeometry(25, 25),
-                new THREE.MeshStandardMaterial({ color: 0x4a8b4a })
-            );
-            parkGrass.rotation.x = -Math.PI / 2;
-            parkGrass.position.y = 0.02;
-            group.add(parkGrass);
-
-            // Iron fence around park
-            const fenceMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 });
-            const fenceHeight = 1.5;
-
-            for (let side = 0; side < 4; side++) {
-                for (let i = -11; i <= 11; i += 2) {
-                    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, fenceHeight, 6), fenceMat);
-                    if (side === 0) post.position.set(i, fenceHeight/2, 12);
-                    else if (side === 1) post.position.set(i, fenceHeight/2, -12);
-                    else if (side === 2) post.position.set(12, fenceHeight/2, i);
-                    else post.position.set(-12, fenceHeight/2, i);
-                    group.add(post);
-                }
-            }
-
-            // Playground equipment - Slide
-            const slideMat = new THREE.MeshStandardMaterial({ color: 0xff4444 });
-            const slide = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 5), slideMat);
-            slide.rotation.x = Math.PI / 6;
-            slide.position.set(-5, 1.5, 0);
-            group.add(slide);
-
-            // Slide ladder
-            const ladderMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
-            const ladder = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3, 0.3), ladderMat);
-            ladder.position.set(-5, 1.5, -3);
-            group.add(ladder);
-
-            // Swings frame
-            const swingFrame = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 0.2), ladderMat);
-            swingFrame.position.set(5, 2, -2);
-            group.add(swingFrame);
-            const swingFrame2 = swingFrame.clone();
-            swingFrame2.position.set(5, 2, 2);
-            group.add(swingFrame2);
-            const swingTop = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 4.5), ladderMat);
-            swingTop.position.set(5, 4, 0);
-            group.add(swingTop);
-
-            // Swing seats
-            const seatMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            const seat = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.1, 0.4), seatMat);
-            seat.position.set(5, 1, 0);
-            group.add(seat);
-
-            // Bench
-            const benchMat = new THREE.MeshStandardMaterial({ color: 0x654321 });
-            const benchSeat = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 0.8), benchMat);
-            benchSeat.position.set(0, 0.6, 8);
-            group.add(benchSeat);
-
-            group.position.set(x, 0, z);
-            scene.add(group);
-
-            return { position: new THREE.Vector3(x, 0, z), width: 25, depth: 25, height: 4 };
-        }
-
-        // Track placed buildings to avoid overlap
-        const placedBuildings = [];
-
-        function checkOverlap(x, z, width, depth, gap) {
-            for (const b of placedBuildings) {
-                const dx = Math.abs(x - b.x);
-                const dz = Math.abs(z - b.z);
-                if (dx < (width + b.width) / 2 + gap && dz < (depth + b.depth) / 2 + gap) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        function registerBuilding(x, z, width, depth) {
-            placedBuildings.push({ x, z, width, depth });
-        }
-
-        // City area bounds
-        const cityMinX = -100, cityMaxX = 100;
-        const cityMinZ = -100, cityMaxZ = 100;
-        const citySize = cityMaxX - cityMinX;
-
-        // Create main roads (two-way with barrier)
-        const mainRoadPositions = [-50, 0, 50];
-        mainRoadPositions.forEach(pos => {
-            // Horizontal main road
-            const hRoad = new THREE.Mesh(
-                new THREE.PlaneGeometry(citySize, cityConfig.mainRoadWidth),
-                streetMat
-            );
-            hRoad.rotation.x = -Math.PI / 2;
-            hRoad.position.set(0, 0.02, pos);
-            hRoad.receiveShadow = true;
-            scene.add(hRoad);
-
-            // Center barrier
-            for (let bx = cityMinX + 5; bx < cityMaxX; bx += 10) {
-                const barrier = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 0.5), barrierMat);
-                barrier.position.set(bx, 0.2, pos);
-                scene.add(barrier);
-            }
-
-            // Yellow center lines
-            for (let lx = cityMinX; lx < cityMaxX; lx += 8) {
-                const line = new THREE.Mesh(new THREE.PlaneGeometry(5, 0.3), yellowLineMat);
-                line.rotation.x = -Math.PI / 2;
-                line.position.set(lx, 0.03, pos - 0.5);
-                scene.add(line);
-                const line2 = line.clone();
-                line2.position.z = pos + 0.5;
-                scene.add(line2);
-            }
-
-            // Vertical main road
-            const vRoad = new THREE.Mesh(
-                new THREE.PlaneGeometry(cityConfig.mainRoadWidth, citySize),
-                streetMat
-            );
-            vRoad.rotation.x = -Math.PI / 2;
-            vRoad.position.set(pos, 0.02, 0);
-            vRoad.receiveShadow = true;
-            scene.add(vRoad);
-
-            // Center barrier for vertical
-            for (let bz = cityMinZ + 5; bz < cityMaxZ; bz += 10) {
-                if (Math.abs(bz - 0) > 10 && Math.abs(bz - 50) > 10 && Math.abs(bz + 50) > 10) {
-                    const barrier = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 8), barrierMat);
-                    barrier.position.set(pos, 0.2, bz);
-                    scene.add(barrier);
-                }
-            }
-        });
-
-        // Create side roads
-        const sideRoadPositions = [-75, -25, 25, 75];
-        sideRoadPositions.forEach(pos => {
-            // Horizontal side road
-            const hRoad = new THREE.Mesh(
-                new THREE.PlaneGeometry(citySize, cityConfig.sideRoadWidth),
-                streetMat
-            );
-            hRoad.rotation.x = -Math.PI / 2;
-            hRoad.position.set(0, 0.02, pos);
-            scene.add(hRoad);
-
-            // Vertical side road
-            const vRoad = new THREE.Mesh(
-                new THREE.PlaneGeometry(cityConfig.sideRoadWidth, citySize),
-                streetMat
-            );
-            vRoad.rotation.x = -Math.PI / 2;
-            vRoad.position.set(pos, 0.02, 0);
-            scene.add(vRoad);
-        });
-
-        // Create sidewalks and green gaps along main roads
-        mainRoadPositions.forEach(pos => {
-            const sidewalkOffset = cityConfig.mainRoadWidth / 2 + cityConfig.greenGapWidth + cityConfig.sidewalkWidth / 2;
-            const greenOffset = cityConfig.mainRoadWidth / 2 + cityConfig.greenGapWidth / 2;
-
-            // Both sides - horizontal
-            [-1, 1].forEach(side => {
-                // Green gap
-                const greenGap = new THREE.Mesh(
-                    new THREE.PlaneGeometry(citySize, cityConfig.greenGapWidth),
-                    greenGapMat
-                );
-                greenGap.rotation.x = -Math.PI / 2;
-                greenGap.position.set(0, 0.015, pos + side * greenOffset);
-                scene.add(greenGap);
-
-                // Sidewalk
-                const sidewalk = new THREE.Mesh(
-                    new THREE.PlaneGeometry(citySize, cityConfig.sidewalkWidth),
-                    sidewalkMat
-                );
-                sidewalk.rotation.x = -Math.PI / 2;
-                sidewalk.position.set(0, 0.025, pos + side * sidewalkOffset);
-                scene.add(sidewalk);
-            });
-
-            // Both sides - vertical
-            [-1, 1].forEach(side => {
-                const greenGap = new THREE.Mesh(
-                    new THREE.PlaneGeometry(cityConfig.greenGapWidth, citySize),
-                    greenGapMat
-                );
-                greenGap.rotation.x = -Math.PI / 2;
-                greenGap.position.set(pos + side * greenOffset, 0.015, 0);
-                scene.add(greenGap);
-
-                const sidewalk = new THREE.Mesh(
-                    new THREE.PlaneGeometry(cityConfig.sidewalkWidth, citySize),
-                    sidewalkMat
-                );
-                sidewalk.rotation.x = -Math.PI / 2;
-                sidewalk.position.set(pos + side * sidewalkOffset, 0.025, 0);
-                scene.add(sidewalk);
-            });
-        });
-
-        // Place the Super Tower in the center
-        buildings.push(createSuperTower(0, 0));
-        registerBuilding(0, 0, 15, 15);
-
-        // Place special buildings (spread around, never adjacent)
-        const specialLocations = [
-            { x: -70, z: -70 },
-            { x: 70, z: 70 },
-            { x: -70, z: 70 },
-            { x: 70, z: -70 },
-            { x: -35, z: 35 },
-            { x: 35, z: -35 }
-        ];
-
-        // Petrol stations (2)
-        buildings.push(createPetrolStation(specialLocations[0].x, specialLocations[0].z));
-        registerBuilding(specialLocations[0].x, specialLocations[0].z, 22, 17);
-        buildings.push(createPetrolStation(specialLocations[1].x, specialLocations[1].z));
-        registerBuilding(specialLocations[1].x, specialLocations[1].z, 22, 17);
-
-        // Churches (2)
-        buildings.push(createChurch(specialLocations[2].x, specialLocations[2].z));
-        registerBuilding(specialLocations[2].x, specialLocations[2].z, 14, 27);
-        buildings.push(createChurch(specialLocations[3].x, specialLocations[3].z));
-        registerBuilding(specialLocations[3].x, specialLocations[3].z, 14, 27);
-
-        // Construction sites (2)
-        buildings.push(createConstructionSite(specialLocations[4].x, specialLocations[4].z));
-        registerBuilding(specialLocations[4].x, specialLocations[4].z, 26, 26);
-        buildings.push(createConstructionSite(specialLocations[5].x, specialLocations[5].z));
-        registerBuilding(specialLocations[5].x, specialLocations[5].z, 26, 26);
-
-        // Mini parks (3)
-        const parkLocations = [
-            { x: -35, z: -70 },
-            { x: 35, z: 70 },
-            { x: 0, z: -35 }
-        ];
-        parkLocations.forEach(loc => {
-            createMiniPark(loc.x, loc.z);
-            registerBuilding(loc.x, loc.z, 27, 27);
-        });
-
-        // Fill remaining blocks with regular buildings
-        let buildingColorIdx = 0;
-        for (let bx = cityMinX + 20; bx < cityMaxX - 15; bx += 25) {
-            for (let bz = cityMinZ + 20; bz < cityMaxZ - 15; bz += 25) {
-                // Skip if near roads
-                let nearRoad = false;
-                mainRoadPositions.forEach(rp => {
-                    if (Math.abs(bx - rp) < 15 || Math.abs(bz - rp) < 15) nearRoad = true;
-                });
-                sideRoadPositions.forEach(rp => {
-                    if (Math.abs(bx - rp) < 10 || Math.abs(bz - rp) < 10) nearRoad = true;
-                });
-                if (nearRoad) continue;
-
-                // Random building size with drone gap consideration
-                const width = 8 + Math.random() * 8;
-                const depth = 8 + Math.random() * 8;
-                const height = 15 + Math.random() * 40;
-
-                // Add some offset for variety
-                const offsetX = (Math.random() - 0.5) * 5;
-                const offsetZ = (Math.random() - 0.5) * 5;
-                const finalX = bx + offsetX;
-                const finalZ = bz + offsetZ;
-
-                if (!checkOverlap(finalX, finalZ, width, depth, cityConfig.droneGap)) {
-                    buildings.push(createCityBuilding(finalX, finalZ, width, depth, height, buildingColorIdx, true));
-                    registerBuilding(finalX, finalZ, width, depth);
-                    buildingColorIdx++;
-                }
-            }
-        }
-
-        // --- 10b. CARS ---
-        const carColors = [0xff0000, 0x0000ff, 0x00ff00, 0xffff00, 0xffffff, 0x000000, 0xff8800];
-
-        function createCar(x, z, rotation) {
-            const carGroup = new THREE.Group();
-            const color = carColors[Math.floor(Math.random() * carColors.length)];
-            const carMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.3, metalness: 0.8 });
-
-            // Body
-            const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.8, 4), carMat);
-            body.position.y = 0.6;
-            body.castShadow = true;
-            carGroup.add(body);
-
-            // Cabin
-            const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 2), glassMat);
-            cabin.position.y = 1.3;
-            cabin.position.z = -0.3;
-            carGroup.add(cabin);
-
-            // Wheels
-            const wheelGeom = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
-            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-            const wheelPositions = [
-                { x: -1, z: 1.2 }, { x: 1, z: 1.2 },
-                { x: -1, z: -1.2 }, { x: 1, z: -1.2 }
-            ];
-            wheelPositions.forEach(pos => {
-                const wheel = new THREE.Mesh(wheelGeom, wheelMat);
-                wheel.rotation.z = Math.PI / 2;
-                wheel.position.set(pos.x, 0.35, pos.z);
-                carGroup.add(wheel);
-            });
-
-            carGroup.position.set(x, 0, z);
-            carGroup.rotation.y = rotation;
-            scene.add(carGroup);
-        }
-
-        // Place cars along streets
-        for (let i = 0; i < 30; i++) {
-            const streetZ = [-60, -20, 20, 60][Math.floor(Math.random() * 4)];
-            const x = (Math.random() - 0.5) * 140;
-            createCar(x, streetZ + (Math.random() - 0.5) * 4, Math.random() > 0.5 ? 0 : Math.PI);
-        }
-
-        // --- 10c. TRAIN AND TRACKS ---
+        // --- 10a. TRAIN AND TRACKS ---
         // Train tracks
         const trackMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
         const railMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 });
 
-        const trackZ = 90;
         // Track bed
         const trackBed = new THREE.Mesh(new THREE.BoxGeometry(groundSize * 0.8, 0.5, 6), trackMat);
         trackBed.position.set(0, 0.25, trackZ);
@@ -1520,6 +791,7 @@
             rail.position.set(0, 0.6, trackZ + offset);
             scene.add(rail);
         }
+
 
         // Train
         const trainGroup = new THREE.Group();
@@ -1617,221 +889,8 @@
             return false;
         }
 
-        // --- 10d. STREET FURNITURE (City area) ---
 
-        // Street light
-        function createStreetLight(x, z, rotation = 0) {
-            const group = new THREE.Group();
-            const poleMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7 });
-            const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffff88, emissiveIntensity: 0.3 });
-
-            // Pole
-            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 6, 8), poleMat);
-            pole.position.y = 3;
-            group.add(pole);
-
-            // Arm extending over road
-            const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2, 8), poleMat);
-            arm.rotation.z = Math.PI / 2;
-            arm.position.set(1, 5.8, 0);
-            group.add(arm);
-
-            // Light fixture
-            const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.4), poleMat);
-            fixture.position.set(1.8, 5.6, 0);
-            group.add(fixture);
-
-            // Light bulb (glowing)
-            const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), lightMat);
-            bulb.position.set(1.8, 5.4, 0);
-            group.add(bulb);
-
-            group.position.set(x, 0, z);
-            group.rotation.y = rotation;
-            scene.add(group);
-        }
-
-        // Rubbish bin
-        function createRubbishBin(x, z) {
-            const group = new THREE.Group();
-            const binMat = new THREE.MeshStandardMaterial({ color: 0x2a4a2a });
-
-            const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.35, 1, 12), binMat);
-            bin.position.y = 0.5;
-            group.add(bin);
-
-            // Lid
-            const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.1, 12), binMat);
-            lid.position.y = 1.05;
-            group.add(lid);
-
-            group.position.set(x, 0, z);
-            scene.add(group);
-        }
-
-        // Street sign with garbled text
-        function createStreetSign(x, z, rotation = 0) {
-            const group = new THREE.Group();
-            const poleMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.7 });
-            const signMat = new THREE.MeshStandardMaterial({ color: 0x225522 });
-
-            // Pole (thin, flyable gap below sign)
-            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.5, 8), poleMat);
-            pole.position.y = 1.75;
-            group.add(pole);
-
-            // Sign (high enough to fly under)
-            const sign = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.6, 0.1), signMat);
-            sign.position.y = 3.8;
-            group.add(sign);
-
-            // White border
-            const borderMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-            const border = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.7, 0.08), borderMat);
-            border.position.y = 3.8;
-            border.position.z = -0.02;
-            group.add(border);
-
-            group.position.set(x, 0, z);
-            group.rotation.y = rotation;
-            scene.add(group);
-        }
-
-        // Advertisement billboard on building
-        function createAdvertisement(x, y, z, rotation = 0, width = 8, height = 4) {
-            const group = new THREE.Group();
-            const colors = [0xff4444, 0x4444ff, 0x44ff44, 0xffff44, 0xff44ff];
-            const adMat = new THREE.MeshStandardMaterial({
-                color: colors[Math.floor(Math.random() * colors.length)],
-                emissive: 0x222222,
-                emissiveIntensity: 0.2
-            });
-
-            const board = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.3), adMat);
-            board.position.y = y;
-            group.add(board);
-
-            // Frame
-            const frameMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-            const frameT = new THREE.Mesh(new THREE.BoxGeometry(width + 0.4, 0.2, 0.4), frameMat);
-            frameT.position.y = y + height/2;
-            group.add(frameT);
-            const frameB = frameT.clone();
-            frameB.position.y = y - height/2;
-            group.add(frameB);
-
-            group.position.set(x, 0, z);
-            group.rotation.y = rotation;
-            scene.add(group);
-        }
-
-        // Place street lights along sidewalks (not touching buildings)
-        mainRoadPositions.forEach(roadPos => {
-            const sidewalkOffset = cityConfig.mainRoadWidth / 2 + cityConfig.greenGapWidth + cityConfig.sidewalkWidth / 2;
-
-            // Along horizontal roads
-            for (let lx = cityMinX + 15; lx < cityMaxX - 10; lx += 30) {
-                // Check not at intersection
-                let atIntersection = false;
-                mainRoadPositions.forEach(rp => { if (Math.abs(lx - rp) < 10) atIntersection = true; });
-                sideRoadPositions.forEach(rp => { if (Math.abs(lx - rp) < 8) atIntersection = true; });
-                if (atIntersection) continue;
-
-                createStreetLight(lx, roadPos + sidewalkOffset, 0);
-                createStreetLight(lx, roadPos - sidewalkOffset, Math.PI);
-            }
-
-            // Along vertical roads
-            for (let lz = cityMinZ + 15; lz < cityMaxZ - 10; lz += 30) {
-                let atIntersection = false;
-                mainRoadPositions.forEach(rp => { if (Math.abs(lz - rp) < 10) atIntersection = true; });
-                sideRoadPositions.forEach(rp => { if (Math.abs(lz - rp) < 8) atIntersection = true; });
-                if (atIntersection) continue;
-
-                createStreetLight(roadPos + sidewalkOffset, lz, -Math.PI/2);
-                createStreetLight(roadPos - sidewalkOffset, lz, Math.PI/2);
-            }
-        });
-
-        // Place rubbish bins on sidewalks and green gaps
-        for (let i = 0; i < 40; i++) {
-            const onMainRoad = Math.random() > 0.5;
-            const roadPos = onMainRoad
-                ? mainRoadPositions[Math.floor(Math.random() * mainRoadPositions.length)]
-                : sideRoadPositions[Math.floor(Math.random() * sideRoadPositions.length)];
-
-            const offset = (onMainRoad ? cityConfig.mainRoadWidth : cityConfig.sideRoadWidth) / 2 + 1 + Math.random() * 2;
-            const side = Math.random() > 0.5 ? 1 : -1;
-            const horizontal = Math.random() > 0.5;
-
-            const bx = horizontal ? (Math.random() - 0.5) * citySize * 0.8 : roadPos + side * offset;
-            const bz = horizontal ? roadPos + side * offset : (Math.random() - 0.5) * citySize * 0.8;
-
-            // Only place in city area
-            if (Math.abs(bx) < 95 && Math.abs(bz) < 95) {
-                createRubbishBin(bx, bz);
-            }
-        }
-
-        // Place street signs at intersections
-        mainRoadPositions.forEach(mx => {
-            sideRoadPositions.forEach(sz => {
-                if (Math.random() > 0.5) {
-                    createStreetSign(mx + 8, sz + 5, 0);
-                }
-            });
-        });
-        sideRoadPositions.forEach(sx => {
-            mainRoadPositions.forEach(mz => {
-                if (Math.random() > 0.5) {
-                    createStreetSign(sx + 5, mz + 8, Math.PI/2);
-                }
-            });
-        });
-
-        // Place advertisements on some buildings (buildings without many windows)
-        for (let i = 0; i < 15; i++) {
-            const bx = (Math.random() - 0.5) * 150;
-            const bz = (Math.random() - 0.5) * 150;
-            const height = 10 + Math.random() * 20;
-            const rotation = Math.random() * Math.PI * 2;
-
-            // Only in city area
-            if (Math.abs(bx) < 90 && Math.abs(bz) < 90) {
-                createAdvertisement(bx, height, bz, rotation, 6 + Math.random() * 4, 3 + Math.random() * 2);
-            }
-        }
-
-        // Safety cones ONLY outside city area (along track)
-        const coneMat = new THREE.MeshStandardMaterial({ color: 0xFF6600 });
-        const coneStripeMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
-
-        function createSafetyCone(x, z) {
-            const coneGroup = new THREE.Group();
-            const cone = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.2, 8), coneMat);
-            cone.position.y = 0.6;
-            coneGroup.add(cone);
-
-            const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.05, 8, 16), coneStripeMat);
-            stripe.rotation.x = Math.PI / 2;
-            stripe.position.y = 0.8;
-            coneGroup.add(stripe);
-
-            const base = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.1, 0.8), coneMat);
-            base.position.y = 0.05;
-            coneGroup.add(base);
-
-            coneGroup.position.set(x, 0, z);
-            scene.add(coneGroup);
-        }
-
-        // Cones only along train track (outside city)
-        for (let x = -150; x <= 150; x += 20) {
-            createSafetyCone(x, trackZ - 5);
-            createSafetyCone(x, trackZ + 5);
-        }
-
-        // --- 10e. MANY DIFFERENT TREE TYPES ---
+        // --- 10b. MANY DIFFERENT TREE TYPES ---
         const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
         const birchTrunkMat = new THREE.MeshStandardMaterial({ color: 0xe8e4d9 });
         const willowTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4a32 });
@@ -2082,169 +1141,137 @@
             return { position: new THREE.Vector3(x, 0, z), radius: 1 * scale, height: 1.5 * scale };
         }
 
-        const edgeOffset = groundSize / 2 - 20;
+        // ============================================
+        // FILL ENTIRE AREA WITH NON-OVERLAPPING TREES
+        // ============================================
 
-        // Very dense forest at edges (500+ trees)
-        for (let i = 0; i < 500; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = edgeOffset - 20 + Math.random() * 40;
-            const x = Math.cos(angle) * dist;
-            const z = Math.sin(angle) * dist;
-            const scale = 0.5 + Math.random() * 1.0;
-            const type = Math.random();
+        // Create a tree and register its position
+        function placeTree(x, z, scale, type) {
+            const radius = 2 * scale;
 
-            if (type < 0.25) {
-                trees.push(createPineTree(x, z, scale));
+            // Check if this position is valid (no overlap)
+            if (!canPlaceTree(x, z, radius)) return false;
+
+            // Create tree based on type
+            let tree;
+            if (type < 0.20) {
+                tree = createPineTree(x, z, scale);
+            } else if (type < 0.35) {
+                tree = createOakTree(x, z, scale);
             } else if (type < 0.45) {
-                trees.push(createOakTree(x, z, scale));
+                tree = createBirchTree(x, z, scale);
             } else if (type < 0.55) {
-                trees.push(createBirchTree(x, z, scale));
+                tree = createWillowTree(x, z, scale);
             } else if (type < 0.65) {
-                trees.push(createWillowTree(x, z, scale));
+                tree = createCypressTree(x, z, scale);
             } else if (type < 0.75) {
-                trees.push(createCypressTree(x, z, scale));
+                tree = createMapleTree(x, z, scale);
             } else if (type < 0.85) {
-                trees.push(createMapleTree(x, z, scale));
-            } else if (type < 0.92) {
-                trees.push(createPalmTree(x, z, scale));
+                tree = createPalmTree(x, z, scale);
             } else {
-                trees.push(createBush(x, z, scale));
+                tree = createBush(x, z, scale);
             }
-        }
 
-        // Park trees (200+ more between city and edges)
-        for (let i = 0; i < 200; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 0.7;
-            const z = (Math.random() - 0.5) * groundSize * 0.7;
-            if (Math.abs(x) < 85 && Math.abs(z) < 85) continue;
-            if (z > 80 && z < 100) continue; // Skip train track
-            const scale = 0.6 + Math.random() * 0.7;
-            const type = Math.random();
-
-            if (type < 0.3) trees.push(createOakTree(x, z, scale));
-            else if (type < 0.5) trees.push(createPineTree(x, z, scale));
-            else if (type < 0.65) trees.push(createBirchTree(x, z, scale));
-            else if (type < 0.8) trees.push(createMapleTree(x, z, scale));
-            else trees.push(createBush(x, z, scale * 0.8));
-        }
-
-        // Trees near spawn area
-        for (let i = 0; i < 50; i++) {
-            const x = (Math.random() - 0.5) * 80;
-            const z = -140 + Math.random() * 30;
-            const scale = 0.6 + Math.random() * 0.6;
-            if (Math.random() > 0.5) trees.push(createOakTree(x, z, scale));
-            else trees.push(createBirchTree(x, z, scale));
-        }
-
-        // Bushes scattered around
-        for (let i = 0; i < 150; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 0.85;
-            const z = (Math.random() - 0.5) * groundSize * 0.85;
-            if (Math.abs(x) < 90 && Math.abs(z) < 90) continue;
-            trees.push(createBush(x, z, 0.6 + Math.random() * 0.6));
-        }
-
-        // --- CITY GREEN GAP TREES AND GRASS ---
-        // Track placed city trees to prevent overlap
-        const cityTreePositions = [];
-
-        function canPlaceCityTree(x, z, radius) {
-            // Check against buildings
-            for (const b of placedBuildings) {
-                const dx = Math.abs(x - b.x);
-                const dz = Math.abs(z - b.z);
-                if (dx < b.width / 2 + radius + 2 && dz < b.depth / 2 + radius + 2) {
-                    return false;
-                }
-            }
-            // Check against other city trees
-            for (const t of cityTreePositions) {
-                const dx = x - t.x;
-                const dz = z - t.z;
-                if (Math.sqrt(dx * dx + dz * dz) < radius + t.radius + 1) {
-                    return false;
-                }
-            }
+            trees.push(tree);
+            registerTree(x, z, radius);
             return true;
         }
 
-        // Place trees along green gaps (main roads)
-        mainRoadPositions.forEach(roadPos => {
-            const greenOffset = cityConfig.mainRoadWidth / 2 + cityConfig.greenGapWidth / 2;
+        // Fill the entire ground with trees using grid-based placement
+        const treeSpacing = 12;  // Base spacing between trees
+        const areaSize = groundSize * 0.9;
 
-            // Trees along horizontal roads
-            for (let tx = cityMinX + 10; tx < cityMaxX - 10; tx += 8 + Math.random() * 6) {
-                [-1, 1].forEach(side => {
-                    const treeZ = roadPos + side * greenOffset;
-                    const treeX = tx + (Math.random() - 0.5) * 3;
+        for (let gx = -areaSize / 2; gx < areaSize / 2; gx += treeSpacing) {
+            for (let gz = -areaSize / 2; gz < areaSize / 2; gz += treeSpacing) {
+                // Add randomness to position
+                const x = gx + (Math.random() - 0.5) * treeSpacing * 0.8;
+                const z = gz + (Math.random() - 0.5) * treeSpacing * 0.8;
 
-                    // Skip intersections
-                    let atIntersection = false;
-                    mainRoadPositions.forEach(rp => { if (Math.abs(treeX - rp) < 12) atIntersection = true; });
-                    sideRoadPositions.forEach(rp => { if (Math.abs(treeX - rp) < 8) atIntersection = true; });
-                    if (atIntersection) return;
+                // Skip train track area
+                if (z > trackZ - 10 && z < trackZ + 10) continue;
 
-                    if (canPlaceCityTree(treeX, treeZ, 1.5)) {
-                        const scale = 0.4 + Math.random() * 0.3;
-                        const type = Math.random();
-                        if (type < 0.3) trees.push(createOakTree(treeX, treeZ, scale));
-                        else if (type < 0.5) trees.push(createMapleTree(treeX, treeZ, scale));
-                        else if (type < 0.7) trees.push(createBirchTree(treeX, treeZ, scale));
-                        else trees.push(createBush(treeX, treeZ, scale * 0.8));
-                        cityTreePositions.push({ x: treeX, z: treeZ, radius: 1.5 * scale });
-                    }
-                });
+                // Skip spawn area (small clear zone)
+                if (Math.abs(x) < 15 && z < -100 && z > -140) continue;
+
+                const scale = 0.6 + Math.random() * 0.8;
+                const type = Math.random();
+
+                placeTree(x, z, scale, type);
             }
+        }
 
-            // Trees along vertical roads
-            for (let tz = cityMinZ + 10; tz < cityMaxZ - 10; tz += 8 + Math.random() * 6) {
-                [-1, 1].forEach(side => {
-                    const treeX = roadPos + side * greenOffset;
-                    const treeZ = tz + (Math.random() - 0.5) * 3;
+        // Add extra trees in gaps (second pass with offset grid)
+        for (let gx = -areaSize / 2 + treeSpacing / 2; gx < areaSize / 2; gx += treeSpacing) {
+            for (let gz = -areaSize / 2 + treeSpacing / 2; gz < areaSize / 2; gz += treeSpacing) {
+                const x = gx + (Math.random() - 0.5) * treeSpacing * 0.6;
+                const z = gz + (Math.random() - 0.5) * treeSpacing * 0.6;
 
-                    let atIntersection = false;
-                    mainRoadPositions.forEach(rp => { if (Math.abs(treeZ - rp) < 12) atIntersection = true; });
-                    sideRoadPositions.forEach(rp => { if (Math.abs(treeZ - rp) < 8) atIntersection = true; });
-                    if (atIntersection) return;
+                if (z > trackZ - 10 && z < trackZ + 10) continue;
+                if (Math.abs(x) < 15 && z < -100 && z > -140) continue;
 
-                    if (canPlaceCityTree(treeX, treeZ, 1.5)) {
-                        const scale = 0.4 + Math.random() * 0.3;
-                        const type = Math.random();
-                        if (type < 0.3) trees.push(createOakTree(treeX, treeZ, scale));
-                        else if (type < 0.5) trees.push(createMapleTree(treeX, treeZ, scale));
-                        else if (type < 0.7) trees.push(createBirchTree(treeX, treeZ, scale));
-                        else trees.push(createBush(treeX, treeZ, scale * 0.8));
-                        cityTreePositions.push({ x: treeX, z: treeZ, radius: 1.5 * scale });
-                    }
-                });
+                const scale = 0.4 + Math.random() * 0.6;
+                const type = Math.random();
+
+                placeTree(x, z, scale, type);
             }
-        });
+        }
 
-        // 3D grass in green gaps
-        const cityGrassMat = new THREE.MeshStandardMaterial({
+        // Add bushes between trees (denser fill)
+        for (let i = 0; i < 800; i++) {
+            const x = (Math.random() - 0.5) * areaSize;
+            const z = (Math.random() - 0.5) * areaSize;
+
+            if (z > trackZ - 10 && z < trackZ + 10) continue;
+            if (Math.abs(x) < 15 && z < -100 && z > -140) continue;
+
+            const scale = 0.3 + Math.random() * 0.5;
+            if (canPlaceTree(x, z, scale)) {
+                trees.push(createBush(x, z, scale));
+                registerTree(x, z, scale);
+            }
+        }
+
+        // ============================================
+        // EXTENSIVE 3D GRASS COVERAGE
+        // ============================================
+
+        const grassMat = new THREE.MeshStandardMaterial({
             color: 0x4a8b4a,
             roughness: 0.9,
             side: THREE.DoubleSide
         });
 
-        function createCityGrassClump(x, z) {
+        const darkGrassMat = new THREE.MeshStandardMaterial({
+            color: 0x3a7a3a,
+            roughness: 0.9,
+            side: THREE.DoubleSide
+        });
+
+        const lightGrassMat = new THREE.MeshStandardMaterial({
+            color: 0x5a9b5a,
+            roughness: 0.9,
+            side: THREE.DoubleSide
+        });
+
+        function createGrassClump(x, z, tall = false) {
             const group = new THREE.Group();
-            const numBlades = 3 + Math.floor(Math.random() * 4);
+            const numBlades = tall ? (5 + Math.floor(Math.random() * 4)) : (3 + Math.floor(Math.random() * 3));
+            const mats = [grassMat, darkGrassMat, lightGrassMat];
 
             for (let i = 0; i < numBlades; i++) {
-                const bladeHeight = 0.15 + Math.random() * 0.2;
+                const bladeHeight = tall ? (0.4 + Math.random() * 0.5) : (0.15 + Math.random() * 0.2);
+                const bladeMat = mats[Math.floor(Math.random() * mats.length)];
                 const blade = new THREE.Mesh(
-                    new THREE.PlaneGeometry(0.05, bladeHeight),
-                    cityGrassMat
+                    new THREE.PlaneGeometry(0.06, bladeHeight),
+                    bladeMat
                 );
                 blade.position.set(
-                    (Math.random() - 0.5) * 0.15,
+                    (Math.random() - 0.5) * 0.2,
                     bladeHeight / 2,
-                    (Math.random() - 0.5) * 0.15
+                    (Math.random() - 0.5) * 0.2
                 );
                 blade.rotation.y = Math.random() * Math.PI;
-                blade.rotation.x = (Math.random() - 0.5) * 0.3;
+                blade.rotation.x = (Math.random() - 0.5) * 0.4;
                 group.add(blade);
             }
 
@@ -2252,47 +1279,62 @@
             scene.add(group);
         }
 
-        // Place grass along green gaps
-        mainRoadPositions.forEach(roadPos => {
-            const greenOffset = cityConfig.mainRoadWidth / 2 + cityConfig.greenGapWidth / 2;
+        // Dense grass coverage across entire area
+        const grassDensity = 1.2;  // Spacing between grass clumps
+        const grassArea = groundSize * 0.95;
 
-            // Grass along horizontal green gaps
-            for (let gx = cityMinX + 2; gx < cityMaxX - 2; gx += 1.5 + Math.random()) {
-                [-1, 1].forEach(side => {
-                    const gz = roadPos + side * greenOffset + (Math.random() - 0.5) * cityConfig.greenGapWidth * 0.8;
-                    // Skip if near a tree
-                    let nearTree = false;
-                    for (const t of cityTreePositions) {
-                        if (Math.abs(gx - t.x) < t.radius + 0.5 && Math.abs(gz - t.z) < t.radius + 0.5) {
-                            nearTree = true;
-                            break;
-                        }
+        for (let gx = -grassArea / 2; gx < grassArea / 2; gx += grassDensity) {
+            for (let gz = -grassArea / 2; gz < grassArea / 2; gz += grassDensity) {
+                // Skip train track
+                if (gz > trackZ - 6 && gz < trackZ + 6) continue;
+
+                // Random offset
+                const x = gx + (Math.random() - 0.5) * grassDensity * 0.8;
+                const z = gz + (Math.random() - 0.5) * grassDensity * 0.8;
+
+                // Check if not too close to a tree
+                let nearTree = false;
+                for (const t of treePositions) {
+                    const dx = x - t.x;
+                    const dz = z - t.z;
+                    if (Math.sqrt(dx * dx + dz * dz) < t.radius + 0.5) {
+                        nearTree = true;
+                        break;
                     }
-                    if (!nearTree && Math.random() > 0.3) {
-                        createCityGrassClump(gx, gz);
-                    }
-                });
+                }
+
+                if (!nearTree && Math.random() > 0.15) {
+                    const tall = Math.random() > 0.7;
+                    createGrassClump(x, z, tall);
+                }
+            }
+        }
+
+        // Extra tall grass patches scattered around
+        for (let i = 0; i < 2000; i++) {
+            const x = (Math.random() - 0.5) * grassArea;
+            const z = (Math.random() - 0.5) * grassArea;
+
+            if (z > trackZ - 6 && z < trackZ + 6) continue;
+
+            let nearTree = false;
+            for (const t of treePositions) {
+                const dx = x - t.x;
+                const dz = z - t.z;
+                if (Math.sqrt(dx * dx + dz * dz) < t.radius + 0.3) {
+                    nearTree = true;
+                    break;
+                }
             }
 
-            // Grass along vertical green gaps
-            for (let gz = cityMinZ + 2; gz < cityMaxZ - 2; gz += 1.5 + Math.random()) {
-                [-1, 1].forEach(side => {
-                    const gx = roadPos + side * greenOffset + (Math.random() - 0.5) * cityConfig.greenGapWidth * 0.8;
-                    let nearTree = false;
-                    for (const t of cityTreePositions) {
-                        if (Math.abs(gx - t.x) < t.radius + 0.5 && Math.abs(gz - t.z) < t.radius + 0.5) {
-                            nearTree = true;
-                            break;
-                        }
-                    }
-                    if (!nearTree && Math.random() > 0.3) {
-                        createCityGrassClump(gx, gz);
-                    }
-                });
+            if (!nearTree) {
+                createGrassClump(x, z, true);
             }
-        });
+        }
 
-        // --- 10f. VARIED CLOUDS ---
+        // --- (Old city code removed) ---
+
+        // --- 10c. VARIED CLOUDS ---
         const clouds = [];
 
         function createCloud(x, y, z, type = 'normal') {
