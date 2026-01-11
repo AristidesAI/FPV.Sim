@@ -1279,57 +1279,42 @@
             scene.add(group);
         }
 
-        // Dense grass coverage across entire area
-        const grassDensity = 1.2;  // Spacing between grass clumps
-        const grassArea = groundSize * 0.95;
+        // Grass coverage - use random placement instead of grid to limit count
+        const grassArea = groundSize * 0.9;
 
-        for (let gx = -grassArea / 2; gx < grassArea / 2; gx += grassDensity) {
-            for (let gz = -grassArea / 2; gz < grassArea / 2; gz += grassDensity) {
-                // Skip train track
-                if (gz > trackZ - 6 && gz < trackZ + 6) continue;
-
-                // Random offset
-                const x = gx + (Math.random() - 0.5) * grassDensity * 0.8;
-                const z = gz + (Math.random() - 0.5) * grassDensity * 0.8;
-
-                // Check if not too close to a tree
-                let nearTree = false;
-                for (const t of treePositions) {
-                    const dx = x - t.x;
-                    const dz = z - t.z;
-                    if (Math.sqrt(dx * dx + dz * dz) < t.radius + 0.5) {
-                        nearTree = true;
-                        break;
-                    }
-                }
-
-                if (!nearTree && Math.random() > 0.15) {
-                    const tall = Math.random() > 0.7;
-                    createGrassClump(x, z, tall);
-                }
-            }
-        }
-
-        // Extra tall grass patches scattered around
-        for (let i = 0; i < 2000; i++) {
+        // Place grass clumps randomly (controlled count)
+        for (let i = 0; i < 8000; i++) {
             const x = (Math.random() - 0.5) * grassArea;
             const z = (Math.random() - 0.5) * grassArea;
 
+            // Skip train track
             if (z > trackZ - 6 && z < trackZ + 6) continue;
 
+            // Check if not too close to a tree
             let nearTree = false;
             for (const t of treePositions) {
                 const dx = x - t.x;
                 const dz = z - t.z;
-                if (Math.sqrt(dx * dx + dz * dz) < t.radius + 0.3) {
+                if (Math.sqrt(dx * dx + dz * dz) < t.radius + 0.5) {
                     nearTree = true;
                     break;
                 }
             }
 
             if (!nearTree) {
-                createGrassClump(x, z, true);
+                const tall = Math.random() > 0.7;
+                createGrassClump(x, z, tall);
             }
+        }
+
+        // Extra tall grass patches near spawn area
+        for (let i = 0; i < 500; i++) {
+            const x = (Math.random() - 0.5) * 100;
+            const z = -150 + Math.random() * 80;
+
+            if (z > trackZ - 6 && z < trackZ + 6) continue;
+
+            createGrassClump(x, z, true);
         }
 
         // --- (Old city code removed) ---
