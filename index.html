@@ -492,34 +492,35 @@
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
 
-        // Create gradient sky with multiple blue shades
+        // Create sky dome for static background
+        const skyGeometry = new THREE.SphereGeometry(500, 32, 32);
         const skyCanvas = document.createElement('canvas');
-        skyCanvas.width = 512;
-        skyCanvas.height = 512;
+        skyCanvas.width = 1024;
+        skyCanvas.height = 1024;
         const skyCtx = skyCanvas.getContext('2d');
-        const skyGradient = skyCtx.createLinearGradient(0, 0, 0, 512);
-        skyGradient.addColorStop(0, '#1e90ff');      // Deep sky blue at top
-        skyGradient.addColorStop(0.2, '#4da6ff');    // Medium blue
-        skyGradient.addColorStop(0.4, '#87CEEB');    // Sky blue
-        skyGradient.addColorStop(0.6, '#b0e0e6');    // Powder blue
-        skyGradient.addColorStop(0.8, '#e0f4ff');    // Light blue
-        skyGradient.addColorStop(1, '#f5faff');      // Almost white at horizon
-        skyCtx.fillStyle = skyGradient;
-        skyCtx.fillRect(0, 0, 512, 512);
 
-        // Add subtle shimmer/shine effect
-        for (let i = 0; i < 200; i++) {
-            const x = Math.random() * 512;
-            const y = Math.random() * 300;
-            skyCtx.fillStyle = `rgba(255, 255, 255, ${0.1 + Math.random() * 0.2})`;
-            skyCtx.beginPath();
-            skyCtx.arc(x, y, 1 + Math.random() * 2, 0, Math.PI * 2);
-            skyCtx.fill();
-        }
+        // Gradient from top to bottom
+        const skyGradient = skyCtx.createLinearGradient(0, 0, 0, 1024);
+        skyGradient.addColorStop(0, '#1565C0');      // Deep blue at top
+        skyGradient.addColorStop(0.15, '#1976D2');   // Royal blue
+        skyGradient.addColorStop(0.3, '#42A5F5');    // Light blue
+        skyGradient.addColorStop(0.5, '#64B5F6');    // Sky blue
+        skyGradient.addColorStop(0.7, '#90CAF9');    // Powder blue
+        skyGradient.addColorStop(0.85, '#BBDEFB');   // Very light blue
+        skyGradient.addColorStop(1, '#E3F2FD');      // Almost white at horizon
+        skyCtx.fillStyle = skyGradient;
+        skyCtx.fillRect(0, 0, 1024, 1024);
 
         const skyTexture = new THREE.CanvasTexture(skyCanvas);
-        scene.background = skyTexture;
-        scene.fog = new THREE.Fog(0xb0e0e6, 150, 600);
+        const skyMaterial = new THREE.MeshBasicMaterial({
+            map: skyTexture,
+            side: THREE.BackSide
+        });
+        const skyDome = new THREE.Mesh(skyGeometry, skyMaterial);
+        scene.add(skyDome);
+
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0xBBDEFB, 150, 500);
 
         const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
         camera.position.set(0, 5, -120);
@@ -626,33 +627,75 @@
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // --- 7b. 3D GRASS BLADES ---
-        const grassBladeGeom = new THREE.PlaneGeometry(0.1, 0.4);
+        // --- 7b. 3D GRASS BLADES AND GRASS CLUMPS ---
         const grassBladeMaterials = [
             new THREE.MeshStandardMaterial({ color: 0x3a7d32, side: THREE.DoubleSide }),
             new THREE.MeshStandardMaterial({ color: 0x4a8d42, side: THREE.DoubleSide }),
             new THREE.MeshStandardMaterial({ color: 0x2d6b27, side: THREE.DoubleSide }),
-            new THREE.MeshStandardMaterial({ color: 0x5a9d52, side: THREE.DoubleSide })
+            new THREE.MeshStandardMaterial({ color: 0x5a9d52, side: THREE.DoubleSide }),
+            new THREE.MeshStandardMaterial({ color: 0x3d8b35, side: THREE.DoubleSide }),
+            new THREE.MeshStandardMaterial({ color: 0x4d9d45, side: THREE.DoubleSide })
         ];
 
-        // Create grass patches in areas without buildings
-        const grassPatches = [];
-        for (let i = 0; i < 3000; i++) {
+        // Create grass clumps (groups of blades)
+        function createGrassClump(x, z, density = 5) {
+            const clumpGroup = new THREE.Group();
+            for (let i = 0; i < density; i++) {
+                const bladeHeight = 0.3 + Math.random() * 0.5;
+                const bladeGeom = new THREE.PlaneGeometry(0.08 + Math.random() * 0.06, bladeHeight);
+                const blade = new THREE.Mesh(
+                    bladeGeom,
+                    grassBladeMaterials[Math.floor(Math.random() * grassBladeMaterials.length)]
+                );
+                blade.position.set(
+                    (Math.random() - 0.5) * 0.5,
+                    bladeHeight / 2,
+                    (Math.random() - 0.5) * 0.5
+                );
+                blade.rotation.y = Math.random() * Math.PI;
+                blade.rotation.x = -0.15 + Math.random() * 0.3;
+                clumpGroup.add(blade);
+            }
+            clumpGroup.position.set(x, 0, z);
+            scene.add(clumpGroup);
+        }
+
+        // Dense grass everywhere except city center and streets
+        for (let i = 0; i < 8000; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 0.95;
+            const z = (Math.random() - 0.5) * groundSize * 0.95;
+
+            // Skip city center
+            if (Math.abs(x) < 85 && Math.abs(z) < 85) continue;
+            // Skip train track area
+            if (z > 85 && z < 95) continue;
+
+            const density = 3 + Math.floor(Math.random() * 5);
+            createGrassClump(x, z, density);
+        }
+
+        // Extra dense grass near spawn area
+        for (let i = 0; i < 2000; i++) {
+            const x = (Math.random() - 0.5) * 60;
+            const z = -120 + (Math.random() - 0.5) * 40;
+            createGrassClump(x, z, 4 + Math.floor(Math.random() * 4));
+        }
+
+        // Tall grass / wild grass patches
+        const tallGrassMat = new THREE.MeshStandardMaterial({ color: 0x6b8e23, side: THREE.DoubleSide });
+        for (let i = 0; i < 500; i++) {
             const x = (Math.random() - 0.5) * groundSize * 0.9;
             const z = (Math.random() - 0.5) * groundSize * 0.9;
+            if (Math.abs(x) < 90 && Math.abs(z) < 90) continue;
 
-            // Skip areas where city will be (center area)
-            if (Math.abs(x) < 80 && Math.abs(z) < 80) continue;
-
-            const blade = new THREE.Mesh(
-                grassBladeGeom,
-                grassBladeMaterials[Math.floor(Math.random() * grassBladeMaterials.length)]
+            const tallGrass = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.15, 0.8 + Math.random() * 0.4),
+                tallGrassMat
             );
-            blade.position.set(x, 0.2, z);
-            blade.rotation.y = Math.random() * Math.PI;
-            blade.rotation.x = -0.1 + Math.random() * 0.2;
-            blade.scale.set(0.8 + Math.random() * 0.5, 0.8 + Math.random() * 0.8, 1);
-            scene.add(blade);
+            tallGrass.position.set(x, 0.4, z);
+            tallGrass.rotation.y = Math.random() * Math.PI;
+            tallGrass.rotation.x = Math.random() * 0.2;
+            scene.add(tallGrass);
         }
 
         // --- 8. DRONE MODEL ---
@@ -693,101 +736,8 @@
         droneGroup.position.copy(physics.position);
         scene.add(droneGroup);
 
-        // --- 9. RACE GATES ---
-        const gates = [];
-        const gatePositions = [
-            { x: 0, y: 0, z: 30, ry: 0 },
-            { x: 30, y: 0, z: 60, ry: Math.PI / 4 },
-            { x: 60, y: 0, z: 40, ry: Math.PI / 2 },
-            { x: 70, y: 0, z: 0, ry: Math.PI / 2 },
-            { x: 50, y: 0, z: -40, ry: Math.PI * 0.75 },
-            { x: 0, y: 0, z: -50, ry: Math.PI },
-            { x: -50, y: 0, z: -30, ry: -Math.PI * 0.75 },
-            { x: -60, y: 0, z: 20, ry: -Math.PI / 2 },
-            { x: -30, y: 0, z: 50, ry: -Math.PI / 4 },
-            { x: 0, y: 0, z: 10, ry: 0 }  // Finish/start gate
-        ];
-
-        function createGate(position, rotationY, index) {
-            const gateGroup = new THREE.Group();
-
-            // Gate dimensions
-            const gateWidth = 6;
-            const gateHeight = 5;
-            const poleRadius = 0.15;
-
-            // Materials
-            const poleMat = new THREE.MeshStandardMaterial({
-                color: index === 0 ? 0xFF4444 : 0x4444FF,
-                roughness: 0.5
-            });
-            const passedMat = new THREE.MeshStandardMaterial({
-                color: 0x44FF44,
-                roughness: 0.5
-            });
-
-            // Poles
-            const poleGeom = new THREE.CylinderGeometry(poleRadius, poleRadius, gateHeight, 8);
-            const leftPole = new THREE.Mesh(poleGeom, poleMat);
-            leftPole.position.set(-gateWidth / 2, gateHeight / 2, 0);
-            leftPole.castShadow = true;
-            gateGroup.add(leftPole);
-
-            const rightPole = new THREE.Mesh(poleGeom, poleMat);
-            rightPole.position.set(gateWidth / 2, gateHeight / 2, 0);
-            rightPole.castShadow = true;
-            gateGroup.add(rightPole);
-
-            // Top bar
-            const topBarGeom = new THREE.CylinderGeometry(poleRadius, poleRadius, gateWidth + 0.3, 8);
-            const topBar = new THREE.Mesh(topBarGeom, poleMat);
-            topBar.rotation.z = Math.PI / 2;
-            topBar.position.set(0, gateHeight, 0);
-            topBar.castShadow = true;
-            gateGroup.add(topBar);
-
-            // Gate number
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = index === 0 ? '#FF4444' : '#4444FF';
-            ctx.fillRect(0, 0, 128, 128);
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 80px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(index === 0 ? 'S' : index.toString(), 64, 64);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            const numberMat = new THREE.MeshBasicMaterial({ map: texture });
-            const numberGeom = new THREE.PlaneGeometry(1.5, 1.5);
-            const numberMesh = new THREE.Mesh(numberGeom, numberMat);
-            numberMesh.position.set(0, gateHeight + 1, 0);
-            gateGroup.add(numberMesh);
-
-            gateGroup.position.set(position.x, position.y, position.z);
-            gateGroup.rotation.y = rotationY;
-
-            scene.add(gateGroup);
-
-            return {
-                group: gateGroup,
-                position: new THREE.Vector3(position.x, position.y, position.z),
-                forward: new THREE.Vector3(Math.sin(rotationY), 0, Math.cos(rotationY)),
-                width: gateWidth,
-                height: gateHeight,
-                passed: false,
-                poleMat: poleMat,
-                passedMat: passedMat,
-                poles: [leftPole, rightPole, topBar]
-            };
-        }
-
-        gatePositions.forEach((pos, i) => {
-            gates.push(createGate(pos, pos.ry, i));
-        });
-        gameState.totalGates = gates.length;
+        // --- 9. GATES REMOVED - FREE FLIGHT MODE ---
+        const gates = [];  // Empty for compatibility
 
         // --- 10. CITY AND ENVIRONMENT ---
         const buildings = [];
@@ -1007,22 +957,22 @@
         const trainGroup = new THREE.Group();
         const trainMat = new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.5 });
 
-        // Locomotive
-        const locomotive = new THREE.Mesh(new THREE.BoxGeometry(5, 4, 12), trainMat);
+        // Locomotive (rotated to face along X axis)
+        const locomotive = new THREE.Mesh(new THREE.BoxGeometry(12, 4, 5), trainMat);
         locomotive.position.set(0, 2.5, 0);
         locomotive.castShadow = true;
         trainGroup.add(locomotive);
 
         // Train front
-        const trainFront = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 3), trainMat);
-        trainFront.position.set(0, 2, 7);
+        const trainFront = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 4), trainMat);
+        trainFront.position.set(7, 2, 0);
         trainGroup.add(trainFront);
 
         // Carriages
         const carriageMat = new THREE.MeshStandardMaterial({ color: 0x2255aa });
         for (let i = 0; i < 4; i++) {
-            const carriage = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.5, 10), carriageMat);
-            carriage.position.set(0, 2.3, -15 - i * 12);
+            const carriage = new THREE.Mesh(new THREE.BoxGeometry(10, 3.5, 4.5), carriageMat);
+            carriage.position.set(-15 - i * 12, 2.3, 0);
             carriage.castShadow = true;
             trainGroup.add(carriage);
         }
@@ -1077,14 +1027,15 @@
             createSafetyCone(x, trackZ + 5);
         }
 
-        // --- 10e. DIFFERENT TREE TYPES ---
+        // --- 10e. MANY DIFFERENT TREE TYPES ---
         const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
+        const birchTrunkMat = new THREE.MeshStandardMaterial({ color: 0xe8e4d9 });
+        const willowTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4a32 });
 
         // Pine tree
         function createPineTree(x, z, scale = 1) {
             const treeGroup = new THREE.Group();
             const trunkHeight = 5 * scale;
-
             const trunk = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.3 * scale, 0.5 * scale, trunkHeight, 8),
                 treeTrunkMat
@@ -1096,16 +1047,14 @@
             const foliageColors = [0x1a4d1a, 0x2d5a27, 0x1f5f1f];
             for (let i = 0; i < 5; i++) {
                 const radius = (4 - i * 0.7) * scale;
-                const height = 3 * scale;
                 const foliage = new THREE.Mesh(
-                    new THREE.ConeGeometry(radius, height, 8),
+                    new THREE.ConeGeometry(radius, 3 * scale, 8),
                     new THREE.MeshStandardMaterial({ color: foliageColors[i % 3] })
                 );
                 foliage.position.y = trunkHeight - 1 + i * 1.5 * scale;
                 foliage.castShadow = true;
                 treeGroup.add(foliage);
             }
-
             treeGroup.position.set(x, 0, z);
             scene.add(treeGroup);
             return { position: new THREE.Vector3(x, 0, z), radius: 1.5 * scale, height: trunkHeight + 8 * scale };
@@ -1115,7 +1064,6 @@
         function createOakTree(x, z, scale = 1) {
             const treeGroup = new THREE.Group();
             const trunkHeight = 4 * scale;
-
             const trunk = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.4 * scale, 0.6 * scale, trunkHeight, 8),
                 treeTrunkMat
@@ -1124,22 +1072,20 @@
             trunk.castShadow = true;
             treeGroup.add(trunk);
 
-            // Spherical foliage
             const foliageMat = new THREE.MeshStandardMaterial({ color: 0x3a7d32 });
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 6; i++) {
                 const foliage = new THREE.Mesh(
                     new THREE.SphereGeometry(2.5 * scale + Math.random(), 8, 6),
                     foliageMat
                 );
                 foliage.position.set(
-                    (Math.random() - 0.5) * 2 * scale,
+                    (Math.random() - 0.5) * 3 * scale,
                     trunkHeight + 1 + Math.random() * 2 * scale,
-                    (Math.random() - 0.5) * 2 * scale
+                    (Math.random() - 0.5) * 3 * scale
                 );
                 foliage.castShadow = true;
                 treeGroup.add(foliage);
             }
-
             treeGroup.position.set(x, 0, z);
             scene.add(treeGroup);
             return { position: new THREE.Vector3(x, 0, z), radius: 2 * scale, height: trunkHeight + 6 * scale };
@@ -1149,8 +1095,6 @@
         function createPalmTree(x, z, scale = 1) {
             const treeGroup = new THREE.Group();
             const trunkHeight = 8 * scale;
-
-            // Curved trunk segments
             for (let i = 0; i < 8; i++) {
                 const segment = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.3 * scale, 0.35 * scale, trunkHeight / 8, 8),
@@ -1161,58 +1105,240 @@
                 segment.castShadow = true;
                 treeGroup.add(segment);
             }
-
-            // Palm fronds
             const frondMat = new THREE.MeshStandardMaterial({ color: 0x228b22, side: THREE.DoubleSide });
             for (let i = 0; i < 8; i++) {
-                const frond = new THREE.Mesh(
-                    new THREE.PlaneGeometry(1 * scale, 5 * scale),
-                    frondMat
-                );
+                const frond = new THREE.Mesh(new THREE.PlaneGeometry(1 * scale, 5 * scale), frondMat);
                 frond.position.y = trunkHeight;
                 frond.rotation.y = (i / 8) * Math.PI * 2;
                 frond.rotation.x = -0.8;
                 treeGroup.add(frond);
             }
-
             treeGroup.position.set(x, 0, z);
             scene.add(treeGroup);
             return { position: new THREE.Vector3(x, 0, z), radius: 1 * scale, height: trunkHeight + 2 * scale };
         }
 
-        // Place lots of trees around edges and in parks
+        // Birch tree (white bark, yellow-green leaves)
+        function createBirchTree(x, z, scale = 1) {
+            const treeGroup = new THREE.Group();
+            const trunkHeight = 6 * scale;
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.2 * scale, 0.3 * scale, trunkHeight, 8),
+                birchTrunkMat
+            );
+            trunk.position.y = trunkHeight / 2;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x90b050 });
+            for (let i = 0; i < 4; i++) {
+                const foliage = new THREE.Mesh(
+                    new THREE.SphereGeometry(1.8 * scale + Math.random() * 0.5, 8, 6),
+                    foliageMat
+                );
+                foliage.position.set(
+                    (Math.random() - 0.5) * 2 * scale,
+                    trunkHeight - 1 + i * 1.2 * scale,
+                    (Math.random() - 0.5) * 2 * scale
+                );
+                foliage.castShadow = true;
+                treeGroup.add(foliage);
+            }
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+            return { position: new THREE.Vector3(x, 0, z), radius: 1.5 * scale, height: trunkHeight + 5 * scale };
+        }
+
+        // Willow tree (drooping branches)
+        function createWillowTree(x, z, scale = 1) {
+            const treeGroup = new THREE.Group();
+            const trunkHeight = 5 * scale;
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.5 * scale, 0.7 * scale, trunkHeight, 8),
+                willowTrunkMat
+            );
+            trunk.position.y = trunkHeight / 2;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            // Drooping foliage
+            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x5a8a32, side: THREE.DoubleSide });
+            for (let i = 0; i < 12; i++) {
+                const droop = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.5 * scale, 4 * scale),
+                    foliageMat
+                );
+                const angle = (i / 12) * Math.PI * 2;
+                droop.position.set(
+                    Math.cos(angle) * 2 * scale,
+                    trunkHeight - 1,
+                    Math.sin(angle) * 2 * scale
+                );
+                droop.rotation.y = angle;
+                droop.rotation.x = 0.5;
+                treeGroup.add(droop);
+            }
+            // Top canopy
+            const canopy = new THREE.Mesh(
+                new THREE.SphereGeometry(3 * scale, 8, 6),
+                foliageMat
+            );
+            canopy.position.y = trunkHeight + 1;
+            canopy.scale.y = 0.6;
+            canopy.castShadow = true;
+            treeGroup.add(canopy);
+
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+            return { position: new THREE.Vector3(x, 0, z), radius: 2.5 * scale, height: trunkHeight + 4 * scale };
+        }
+
+        // Cypress tree (tall and narrow)
+        function createCypressTree(x, z, scale = 1) {
+            const treeGroup = new THREE.Group();
+            const trunkHeight = 2 * scale;
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.2 * scale, 0.3 * scale, trunkHeight, 8),
+                treeTrunkMat
+            );
+            trunk.position.y = trunkHeight / 2;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x2d4a1a });
+            const foliage = new THREE.Mesh(
+                new THREE.ConeGeometry(1.5 * scale, 10 * scale, 8),
+                foliageMat
+            );
+            foliage.position.y = trunkHeight + 5 * scale;
+            foliage.castShadow = true;
+            treeGroup.add(foliage);
+
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+            return { position: new THREE.Vector3(x, 0, z), radius: 1 * scale, height: trunkHeight + 10 * scale };
+        }
+
+        // Maple tree (spreading branches)
+        function createMapleTree(x, z, scale = 1) {
+            const treeGroup = new THREE.Group();
+            const trunkHeight = 3.5 * scale;
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.35 * scale, 0.5 * scale, trunkHeight, 8),
+                treeTrunkMat
+            );
+            trunk.position.y = trunkHeight / 2;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            const foliageColors = [0x8b2500, 0xcd3700, 0xff4500, 0x3a7d32];
+            const color = foliageColors[Math.floor(Math.random() * foliageColors.length)];
+            const foliageMat = new THREE.MeshStandardMaterial({ color: color });
+
+            for (let i = 0; i < 8; i++) {
+                const foliage = new THREE.Mesh(
+                    new THREE.SphereGeometry(2 * scale + Math.random() * 0.8, 8, 6),
+                    foliageMat
+                );
+                foliage.position.set(
+                    (Math.random() - 0.5) * 4 * scale,
+                    trunkHeight + Math.random() * 3 * scale,
+                    (Math.random() - 0.5) * 4 * scale
+                );
+                foliage.castShadow = true;
+                treeGroup.add(foliage);
+            }
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+            return { position: new THREE.Vector3(x, 0, z), radius: 2.5 * scale, height: trunkHeight + 6 * scale };
+        }
+
+        // Bush / shrub
+        function createBush(x, z, scale = 1) {
+            const bushGroup = new THREE.Group();
+            const bushColors = [0x3a7d32, 0x4a8d42, 0x2d6b27, 0x5a9d52];
+            const color = bushColors[Math.floor(Math.random() * bushColors.length)];
+            const bushMat = new THREE.MeshStandardMaterial({ color: color });
+
+            for (let i = 0; i < 4; i++) {
+                const sphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.8 * scale + Math.random() * 0.4, 8, 6),
+                    bushMat
+                );
+                sphere.position.set(
+                    (Math.random() - 0.5) * scale,
+                    0.6 * scale,
+                    (Math.random() - 0.5) * scale
+                );
+                sphere.castShadow = true;
+                bushGroup.add(sphere);
+            }
+            bushGroup.position.set(x, 0, z);
+            scene.add(bushGroup);
+            return { position: new THREE.Vector3(x, 0, z), radius: 1 * scale, height: 1.5 * scale };
+        }
+
         const edgeOffset = groundSize / 2 - 20;
 
-        // Dense forest at edges
-        for (let i = 0; i < 200; i++) {
+        // Very dense forest at edges (500+ trees)
+        for (let i = 0; i < 500; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const dist = edgeOffset - 10 + Math.random() * 30;
+            const dist = edgeOffset - 20 + Math.random() * 40;
             const x = Math.cos(angle) * dist;
             const z = Math.sin(angle) * dist;
-            const scale = 0.6 + Math.random() * 0.8;
+            const scale = 0.5 + Math.random() * 1.0;
             const type = Math.random();
 
-            if (type < 0.5) {
+            if (type < 0.25) {
                 trees.push(createPineTree(x, z, scale));
-            } else if (type < 0.85) {
+            } else if (type < 0.45) {
                 trees.push(createOakTree(x, z, scale));
-            } else {
+            } else if (type < 0.55) {
+                trees.push(createBirchTree(x, z, scale));
+            } else if (type < 0.65) {
+                trees.push(createWillowTree(x, z, scale));
+            } else if (type < 0.75) {
+                trees.push(createCypressTree(x, z, scale));
+            } else if (type < 0.85) {
+                trees.push(createMapleTree(x, z, scale));
+            } else if (type < 0.92) {
                 trees.push(createPalmTree(x, z, scale));
+            } else {
+                trees.push(createBush(x, z, scale));
             }
         }
 
-        // Park trees (between city and edges)
-        for (let i = 0; i < 80; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 0.6;
-            const z = (Math.random() - 0.5) * groundSize * 0.6;
-            // Avoid city center
-            if (Math.abs(x) < 75 && Math.abs(z) < 75) continue;
-            const scale = 0.7 + Math.random() * 0.6;
-            if (Math.random() > 0.5) {
-                trees.push(createOakTree(x, z, scale));
-            } else {
-                trees.push(createPineTree(x, z, scale));
-            }
+        // Park trees (200+ more between city and edges)
+        for (let i = 0; i < 200; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 0.7;
+            const z = (Math.random() - 0.5) * groundSize * 0.7;
+            if (Math.abs(x) < 85 && Math.abs(z) < 85) continue;
+            if (z > 80 && z < 100) continue; // Skip train track
+            const scale = 0.6 + Math.random() * 0.7;
+            const type = Math.random();
+
+            if (type < 0.3) trees.push(createOakTree(x, z, scale));
+            else if (type < 0.5) trees.push(createPineTree(x, z, scale));
+            else if (type < 0.65) trees.push(createBirchTree(x, z, scale));
+            else if (type < 0.8) trees.push(createMapleTree(x, z, scale));
+            else trees.push(createBush(x, z, scale * 0.8));
+        }
+
+        // Trees near spawn area
+        for (let i = 0; i < 50; i++) {
+            const x = (Math.random() - 0.5) * 80;
+            const z = -140 + Math.random() * 30;
+            const scale = 0.6 + Math.random() * 0.6;
+            if (Math.random() > 0.5) trees.push(createOakTree(x, z, scale));
+            else trees.push(createBirchTree(x, z, scale));
+        }
+
+        // Bushes scattered around
+        for (let i = 0; i < 150; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 0.85;
+            const z = (Math.random() - 0.5) * groundSize * 0.85;
+            if (Math.abs(x) < 90 && Math.abs(z) < 90) continue;
+            trees.push(createBush(x, z, 0.6 + Math.random() * 0.6));
         }
 
         // --- 10f. VARIED CLOUDS ---
@@ -1229,6 +1355,8 @@
 
             let numPuffs, puffSize, spread;
 
+            let vertical = 1;
+
             switch(type) {
                 case 'large':
                     numPuffs = 12 + Math.floor(Math.random() * 8);
@@ -1239,12 +1367,31 @@
                     numPuffs = 3 + Math.floor(Math.random() * 3);
                     puffSize = 6;
                     spread = 40;
+                    cloudMat.opacity = 0.5;
                     break;
                 case 'storm':
                     numPuffs = 20 + Math.floor(Math.random() * 10);
                     puffSize = 20;
                     spread = 60;
-                    cloudMat.color.setHex(0xcccccc);
+                    cloudMat.color.setHex(0xaaaaaa);
+                    break;
+                case 'towering':
+                    numPuffs = 15 + Math.floor(Math.random() * 10);
+                    puffSize = 18;
+                    spread = 35;
+                    vertical = 2.5;
+                    break;
+                case 'flat':
+                    numPuffs = 8 + Math.floor(Math.random() * 6);
+                    puffSize = 12;
+                    spread = 70;
+                    vertical = 0.3;
+                    cloudMat.opacity = 0.7;
+                    break;
+                case 'puffy':
+                    numPuffs = 6 + Math.floor(Math.random() * 4);
+                    puffSize = 14;
+                    spread = 25;
                     break;
                 default:
                     numPuffs = 5 + Math.floor(Math.random() * 5);
@@ -1260,10 +1407,10 @@
                 );
                 puff.position.set(
                     (Math.random() - 0.5) * spread,
-                    (Math.random() - 0.5) * (puffSize * 0.8),
+                    (Math.random() - 0.5) * (puffSize * vertical),
                     (Math.random() - 0.5) * (spread * 0.5)
                 );
-                puff.scale.y = 0.5 + Math.random() * 0.3;
+                puff.scale.y = (0.5 + Math.random() * 0.3) * (vertical > 1 ? 1.5 : 1);
                 cloudGroup.add(puff);
             }
 
@@ -1284,30 +1431,90 @@
             return cloudData;
         }
 
-        // Create varied clouds
-        for (let i = 0; i < 15; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2;
-            const y = 70 + Math.random() * 40;
-            const z = (Math.random() - 0.5) * groundSize * 2;
+        // Create massive cloud coverage
+        // Normal fluffy clouds - 60 clouds
+        for (let i = 0; i < 60; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2.5;
+            const y = 65 + Math.random() * 45;
+            const z = (Math.random() - 0.5) * groundSize * 2.5;
             clouds.push(createCloud(x, y, z, 'normal'));
         }
-        for (let i = 0; i < 8; i++) {
+        // Large cumulus clouds - 30 clouds
+        for (let i = 0; i < 30; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2.5;
+            const y = 90 + Math.random() * 60;
+            const z = (Math.random() - 0.5) * groundSize * 2.5;
+            clouds.push(createCloud(x, y, z, 'large'));
+        }
+        // Wispy cirrus clouds - 40 clouds
+        for (let i = 0; i < 40; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2.5;
+            const y = 55 + Math.random() * 35;
+            const z = (Math.random() - 0.5) * groundSize * 2.5;
+            clouds.push(createCloud(x, y, z, 'wispy'));
+        }
+        // Storm clouds - 10 clouds
+        for (let i = 0; i < 10; i++) {
             const x = (Math.random() - 0.5) * groundSize * 2;
-            const y = 100 + Math.random() * 50;
+            const y = 110 + Math.random() * 40;
+            const z = (Math.random() - 0.5) * groundSize * 2;
+            clouds.push(createCloud(x, y, z, 'storm'));
+        }
+        // High altitude thin clouds - 25 clouds
+        for (let i = 0; i < 25; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 3;
+            const y = 140 + Math.random() * 50;
+            const z = (Math.random() - 0.5) * groundSize * 3;
+            clouds.push(createCloud(x, y, z, 'wispy'));
+        }
+        // Low hanging clouds near city - 20 clouds
+        for (let i = 0; i < 20; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 1.5;
+            const y = 45 + Math.random() * 25;
+            const z = (Math.random() - 0.5) * groundSize * 1.5;
+            clouds.push(createCloud(x, y, z, 'normal'));
+        }
+        // Extra large dramatic clouds - 15 clouds
+        for (let i = 0; i < 15; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2;
+            const y = 100 + Math.random() * 70;
             const z = (Math.random() - 0.5) * groundSize * 2;
             clouds.push(createCloud(x, y, z, 'large'));
         }
-        for (let i = 0; i < 12; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2;
-            const y = 60 + Math.random() * 30;
-            const z = (Math.random() - 0.5) * groundSize * 2;
+        // Scattered small puffs - 50 clouds
+        for (let i = 0; i < 50; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2.5;
+            const y = 50 + Math.random() * 60;
+            const z = (Math.random() - 0.5) * groundSize * 2.5;
             clouds.push(createCloud(x, y, z, 'wispy'));
         }
-        for (let i = 0; i < 3; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 1.5;
-            const y = 120 + Math.random() * 30;
-            const z = (Math.random() - 0.5) * groundSize * 1.5;
-            clouds.push(createCloud(x, y, z, 'storm'));
+        // Towering cumulus clouds - 12 clouds
+        for (let i = 0; i < 12; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2;
+            const y = 80 + Math.random() * 40;
+            const z = (Math.random() - 0.5) * groundSize * 2;
+            clouds.push(createCloud(x, y, z, 'towering'));
+        }
+        // Flat stratus clouds - 20 clouds
+        for (let i = 0; i < 20; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2.5;
+            const y = 55 + Math.random() * 30;
+            const z = (Math.random() - 0.5) * groundSize * 2.5;
+            clouds.push(createCloud(x, y, z, 'flat'));
+        }
+        // Puffy cotton-ball clouds - 35 clouds
+        for (let i = 0; i < 35; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2;
+            const y = 70 + Math.random() * 50;
+            const z = (Math.random() - 0.5) * groundSize * 2;
+            clouds.push(createCloud(x, y, z, 'puffy'));
+        }
+        // Very high altitude wisps - 30 clouds
+        for (let i = 0; i < 30; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 3;
+            const y = 180 + Math.random() * 60;
+            const z = (Math.random() - 0.5) * groundSize * 3;
+            clouds.push(createCloud(x, y, z, 'flat'));
         }
 
         // Cloud update function
