@@ -464,13 +464,10 @@
 
         // --- 4. CAMERA CONTROLLER ---
         const cameraController = {
-            offset: new THREE.Vector3(0, 0.15, 0.2),  // FPV camera position on drone
+            offset: new THREE.Vector3(0, 0.12, 0.35),  // Front of drone, between front props
             tiltAngle: 15,      // Camera tilt in degrees (positive = tilted up)
             minTilt: -10,       // Min tilt (looking down)
             maxTilt: 45,        // Max tilt (looking up, for fast forward flight)
-            smoothing: 100.0,   // Very responsive for FPV
-            currentPos: new THREE.Vector3(0, 5, 0),
-            currentLookAt: new THREE.Vector3(0, 5, 10)
         };
 
         // --- 5. THEME & UI ---
@@ -1009,10 +1006,14 @@
         }
 
         // --- 15. CAMERA UPDATE ---
-        function updateCamera(dt) {
-            // FPV camera rigidly attached to drone body
+        // Pre-calculate the 180° flip quaternion (cameras look down -Z, drone forward is +Z)
+        const cameraFlipQuat = new THREE.Quaternion();
+        cameraFlipQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 
-            // Camera position in drone's local space
+        function updateCamera(dt) {
+            // FPV camera rigidly attached to front of drone body
+
+            // Camera position in drone's local space (front of drone, between front props)
             const localOffset = cameraController.offset.clone();
             localOffset.applyQuaternion(droneGroup.quaternion);
             const camPos = physics.position.clone().add(localOffset);
@@ -1020,13 +1021,15 @@
             // Set camera position
             camera.position.copy(camPos);
 
-            // Copy drone's rotation exactly (camera is fixed to drone frame)
+            // Start with drone's rotation
             camera.quaternion.copy(droneGroup.quaternion);
 
+            // Flip camera 180° around Y so it looks forward (+Z) instead of backward (-Z)
+            camera.quaternion.multiply(cameraFlipQuat);
+
             // Apply camera tilt (rotation around local X axis)
-            // Negative because we want to tilt the view up, which means rotating camera down
             const tiltQuat = new THREE.Quaternion();
-            tiltQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -THREE.MathUtils.degToRad(cameraController.tiltAngle));
+            tiltQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(cameraController.tiltAngle));
             camera.quaternion.multiply(tiltQuat);
         }
 
