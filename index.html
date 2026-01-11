@@ -308,7 +308,8 @@
             <div class="key-hints">
                 <span class="key">R</span> Reset &nbsp;
                 <span class="key">Space</span> Start Race<br>
-                <span class="key">Esc</span> Free Flight
+                <span class="key">Esc</span> Free Flight<br>
+                <span class="key">W</span>/<span class="key">S</span> Camera Tilt
             </div>
         </div>
 
@@ -358,6 +359,11 @@
                 <span class="hud-label">Throttle:</span>
                 <span class="hud-value" id="hud-throttle">0</span>
                 <span>%</span>
+            </div>
+            <div class="hud-row">
+                <span class="hud-label">Cam Tilt:</span>
+                <span class="hud-value" id="hud-tilt">15</span>
+                <span>°</span>
             </div>
         </div>
 
@@ -428,14 +434,18 @@
             position: new THREE.Vector3(0, 5, 0),
             velocity: new THREE.Vector3(0, 0, 0),
             gravity: 9.81,
-            dragCoeff: 0.3,
-            maxThrust: 25,      // Force at full throttle
-            hoverThrust: 0.4,   // Throttle needed to hover (approximate)
+            dragCoeff: 0.4,       // Air resistance
+            maxThrust: 30,        // Max thrust force (gives good power-to-weight)
             crashed: false,
             droneRadius: 0.5
         };
 
         const spawnPoint = new THREE.Vector3(0, 5, 0);
+
+        // Thrust works like real acro:
+        // - Thrust vector points "up" from the drone's perspective
+        // - Pitch forward = thrust tilts forward = drone accelerates forward
+        // - At hover, ~40% throttle counters gravity
 
         // --- 3. GAME STATE ---
         const gameState = {
@@ -454,8 +464,11 @@
 
         // --- 4. CAMERA CONTROLLER ---
         const cameraController = {
-            offset: new THREE.Vector3(0, 0.15, 0.1),  // Slightly above and behind drone center (FPV position)
-            smoothing: 50.0,  // High smoothing for tight FPV feel
+            offset: new THREE.Vector3(0, 0.15, 0.2),  // FPV camera position on drone
+            tiltAngle: 15,      // Camera tilt in degrees (positive = tilted up)
+            minTilt: -10,       // Min tilt (looking down)
+            maxTilt: 45,        // Max tilt (looking up, for fast forward flight)
+            smoothing: 100.0,   // Very responsive for FPV
             currentPos: new THREE.Vector3(0, 5, 0),
             currentLookAt: new THREE.Vector3(0, 5, 10)
         };
@@ -997,19 +1010,32 @@
 
         // --- 15. CAMERA UPDATE ---
         function updateCamera(dt) {
-            // First-person FPV camera - mounted on drone, looking forward
+            // First-person FPV camera with adjustable tilt angle
 
-            // Camera position in drone's local space (on top of the body)
+            // Camera position on the drone body
             const localOffset = cameraController.offset.clone();
             localOffset.applyQuaternion(droneGroup.quaternion);
             const targetPos = physics.position.clone().add(localOffset);
 
-            // Look-at point far ahead in drone's forward direction (local +Z)
-            const forwardLocal = new THREE.Vector3(0, 0, 100);
-            forwardLocal.applyQuaternion(droneGroup.quaternion);
-            const targetLookAt = physics.position.clone().add(forwardLocal);
+            // Calculate look direction with camera tilt
+            // Start with forward direction (+Z in local space)
+            const tiltRad = THREE.MathUtils.degToRad(cameraController.tiltAngle);
 
-            // Apply with high responsiveness for FPV feel
+            // Create tilted forward vector (tilt up means looking above horizon)
+            // In drone local space: Z is forward, Y is up
+            const lookDir = new THREE.Vector3(
+                0,
+                Math.sin(tiltRad),      // Y component from tilt
+                Math.cos(tiltRad)       // Z component (forward)
+            );
+            lookDir.normalize();
+            lookDir.multiplyScalar(100);  // Look far ahead
+
+            // Transform to world space using drone's rotation
+            lookDir.applyQuaternion(droneGroup.quaternion);
+            const targetLookAt = physics.position.clone().add(lookDir);
+
+            // Apply with very high responsiveness for FPV feel
             const lerpFactor = Math.min(1, cameraController.smoothing * dt);
             cameraController.currentPos.lerp(targetPos, lerpFactor);
             cameraController.currentLookAt.lerp(targetLookAt, lerpFactor);
@@ -1026,6 +1052,7 @@
             document.getElementById('hud-speed').textContent = speed.toFixed(1);
             document.getElementById('hud-alt').textContent = alt.toFixed(1);
             document.getElementById('hud-throttle').textContent = Math.round(throttle01 * 100);
+            document.getElementById('hud-tilt').textContent = cameraController.tiltAngle;
 
             if (gameState.mode === 'racing') {
                 const elapsed = (performance.now() - gameState.raceStartTime) / 1000;
@@ -1067,6 +1094,20 @@
                     document.getElementById('race-info').style.display = 'none';
                     showNotification('Race cancelled');
                 }
+            } else if (e.code === 'KeyW') {
+                // Tilt camera up
+                cameraController.tiltAngle = Math.min(
+                    cameraController.maxTilt,
+                    cameraController.tiltAngle + 5
+                );
+                showNotification(`Camera tilt: ${cameraController.tiltAngle}°`);
+            } else if (e.code === 'KeyS') {
+                // Tilt camera down
+                cameraController.tiltAngle = Math.max(
+                    cameraController.minTilt,
+                    cameraController.tiltAngle - 5
+                );
+                showNotification(`Camera tilt: ${cameraController.tiltAngle}°`);
             }
         });
 
