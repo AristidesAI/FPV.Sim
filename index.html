@@ -431,7 +431,7 @@
 
         // --- 2. PHYSICS STATE ---
         const physics = {
-            position: new THREE.Vector3(0, 5, 0),
+            position: new THREE.Vector3(0, 3, 0),
             velocity: new THREE.Vector3(0, 0, 0),
             gravity: 9.81,
             dragCoeff: 0.4,       // Air resistance
@@ -440,7 +440,7 @@
             droneRadius: 0.5
         };
 
-        const spawnPoint = new THREE.Vector3(0, 5, 0);
+        const spawnPoint = new THREE.Vector3(0, 3, 0);  // Start 3m above ground
 
         // Thrust works like real acro:
         // - Thrust vector points "up" from the drone's perspective
@@ -497,7 +497,7 @@
         scene.fog = new THREE.Fog(0x87CEEB, 100, 500);
 
         const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
-        camera.position.set(0, 5, 0);  // Initial position, will be updated by updateCamera()
+        camera.position.set(0, 3, 0);  // Initial position, will be updated by updateCamera()
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
@@ -523,24 +523,54 @@
         sunLight.shadow.camera.bottom = -100;
         scene.add(sunLight);
 
-        // --- 7. GROUND PLANE ---
+        // --- 7. GROUND PLANE WITH GRASS TEXTURE ---
         const groundSize = 400;
-        const groundGeom = new THREE.PlaneGeometry(groundSize, groundSize, 50, 50);
+
+        // Create procedural grass texture
+        const grassCanvas = document.createElement('canvas');
+        grassCanvas.width = 512;
+        grassCanvas.height = 512;
+        const grassCtx = grassCanvas.getContext('2d');
+
+        // Base green
+        grassCtx.fillStyle = '#3a7d32';
+        grassCtx.fillRect(0, 0, 512, 512);
+
+        // Add grass variation
+        for (let i = 0; i < 8000; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            const shade = Math.random() * 40 - 20;
+            const g = Math.floor(125 + shade);
+            grassCtx.fillStyle = `rgb(${50 + Math.random() * 20}, ${g}, ${40 + Math.random() * 20})`;
+            grassCtx.fillRect(x, y, 2 + Math.random() * 3, 2 + Math.random() * 3);
+        }
+
+        // Add some darker patches
+        for (let i = 0; i < 50; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            grassCtx.fillStyle = 'rgba(30, 80, 30, 0.3)';
+            grassCtx.beginPath();
+            grassCtx.arc(x, y, 10 + Math.random() * 20, 0, Math.PI * 2);
+            grassCtx.fill();
+        }
+
+        const grassTexture = new THREE.CanvasTexture(grassCanvas);
+        grassTexture.wrapS = THREE.RepeatWrapping;
+        grassTexture.wrapT = THREE.RepeatWrapping;
+        grassTexture.repeat.set(50, 50);
+
+        const groundGeom = new THREE.PlaneGeometry(groundSize, groundSize);
         const groundMat = new THREE.MeshStandardMaterial({
-            color: 0x3d8c40,
+            map: grassTexture,
             roughness: 0.9
         });
         const ground = new THREE.Mesh(groundGeom, groundMat);
         ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0;
         ground.receiveShadow = true;
         scene.add(ground);
-
-        // Grid overlay on ground
-        const gridHelper = new THREE.GridHelper(groundSize, 100, 0x2d6b30, 0x2d6b30);
-        gridHelper.position.y = 0.01;
-        gridHelper.material.opacity = 0.3;
-        gridHelper.material.transparent = true;
-        scene.add(gridHelper);
 
         // --- 8. DRONE MODEL ---
         const droneGroup = new THREE.Group();
@@ -583,16 +613,16 @@
         // --- 9. RACE GATES ---
         const gates = [];
         const gatePositions = [
-            { x: 0, y: 4, z: 30, ry: 0 },
-            { x: 30, y: 5, z: 60, ry: Math.PI / 4 },
-            { x: 60, y: 3, z: 40, ry: Math.PI / 2 },
-            { x: 70, y: 6, z: 0, ry: Math.PI / 2 },
-            { x: 50, y: 4, z: -40, ry: Math.PI * 0.75 },
-            { x: 0, y: 5, z: -50, ry: Math.PI },
-            { x: -50, y: 3, z: -30, ry: -Math.PI * 0.75 },
-            { x: -60, y: 5, z: 20, ry: -Math.PI / 2 },
-            { x: -30, y: 4, z: 50, ry: -Math.PI / 4 },
-            { x: 0, y: 4, z: 10, ry: 0 }  // Finish/start gate
+            { x: 0, y: 0, z: 30, ry: 0 },
+            { x: 30, y: 0, z: 60, ry: Math.PI / 4 },
+            { x: 60, y: 0, z: 40, ry: Math.PI / 2 },
+            { x: 70, y: 0, z: 0, ry: Math.PI / 2 },
+            { x: 50, y: 0, z: -40, ry: Math.PI * 0.75 },
+            { x: 0, y: 0, z: -50, ry: Math.PI },
+            { x: -50, y: 0, z: -30, ry: -Math.PI * 0.75 },
+            { x: -60, y: 0, z: 20, ry: -Math.PI / 2 },
+            { x: -30, y: 0, z: 50, ry: -Math.PI / 4 },
+            { x: 0, y: 0, z: 10, ry: 0 }  // Finish/start gate
         ];
 
         function createGate(position, rotationY, index) {
@@ -678,20 +708,20 @@
 
         // --- 10. DECORATIVE ELEMENTS ---
         // Start/Finish banner poles
-        const bannerPoleGeom = new THREE.CylinderGeometry(0.2, 0.2, 12, 8);
+        const bannerPoleGeom = new THREE.CylinderGeometry(0.2, 0.2, 8, 8);
         const bannerPoleMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
 
         const leftBannerPole = new THREE.Mesh(bannerPoleGeom, bannerPoleMat);
-        leftBannerPole.position.set(-8, 6, 5);
+        leftBannerPole.position.set(-8, 4, 5);
         leftBannerPole.castShadow = true;
         scene.add(leftBannerPole);
 
         const rightBannerPole = new THREE.Mesh(bannerPoleGeom, bannerPoleMat);
-        rightBannerPole.position.set(8, 6, 5);
+        rightBannerPole.position.set(8, 4, 5);
         rightBannerPole.castShadow = true;
         scene.add(rightBannerPole);
 
-        // Cones around track
+        // Cones around track (on ground)
         const coneMat = new THREE.MeshStandardMaterial({ color: 0xFF6600 });
         const conePositions = [
             { x: -15, z: 0 }, { x: 15, z: 0 },
@@ -706,7 +736,157 @@
             scene.add(cone);
         });
 
+        // --- 10b. TREES AROUND EDGES ---
+        const trees = [];
+        const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
+        const treeLeavesMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27 });
+
+        function createTree(x, z) {
+            const treeGroup = new THREE.Group();
+
+            // Randomize tree size
+            const scale = 0.8 + Math.random() * 0.6;
+            const trunkHeight = 4 * scale;
+            const trunkRadius = 0.4 * scale;
+
+            // Trunk
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(trunkRadius * 0.7, trunkRadius, trunkHeight, 8),
+                treeTrunkMat
+            );
+            trunk.position.y = trunkHeight / 2;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            // Foliage (3 stacked cones)
+            const foliageColors = [0x2d5a27, 0x3a7d32, 0x4a8d42];
+            for (let i = 0; i < 3; i++) {
+                const foliageRadius = (3 - i * 0.6) * scale;
+                const foliageHeight = 3 * scale;
+                const foliage = new THREE.Mesh(
+                    new THREE.ConeGeometry(foliageRadius, foliageHeight, 8),
+                    new THREE.MeshStandardMaterial({ color: foliageColors[i] })
+                );
+                foliage.position.y = trunkHeight + i * 1.8 * scale;
+                foliage.castShadow = true;
+                treeGroup.add(foliage);
+            }
+
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+
+            return {
+                position: new THREE.Vector3(x, 0, z),
+                radius: trunkRadius + 1,  // Collision radius
+                height: trunkHeight + 6 * scale
+            };
+        }
+
+        // Place trees around the edges of the map
+        const edgeOffset = groundSize / 2 - 15;
+        const treeSpacing = 12;
+
+        // North and South edges
+        for (let x = -edgeOffset; x <= edgeOffset; x += treeSpacing + Math.random() * 8) {
+            trees.push(createTree(x + Math.random() * 5, edgeOffset + Math.random() * 10));
+            trees.push(createTree(x + Math.random() * 5, -edgeOffset - Math.random() * 10));
+        }
+        // East and West edges
+        for (let z = -edgeOffset; z <= edgeOffset; z += treeSpacing + Math.random() * 8) {
+            trees.push(createTree(edgeOffset + Math.random() * 10, z + Math.random() * 5));
+            trees.push(createTree(-edgeOffset - Math.random() * 10, z + Math.random() * 5));
+        }
+
+        // --- 10c. CLOUDS ---
+        const clouds = [];
+        const cloudMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.9,
+            roughness: 1
+        });
+
+        function createCloud(x, y, z) {
+            const cloudGroup = new THREE.Group();
+
+            // Create cloud from multiple spheres
+            const numPuffs = 5 + Math.floor(Math.random() * 5);
+            for (let i = 0; i < numPuffs; i++) {
+                const puffSize = 8 + Math.random() * 12;
+                const puff = new THREE.Mesh(
+                    new THREE.SphereGeometry(puffSize, 8, 6),
+                    cloudMat
+                );
+                puff.position.set(
+                    (Math.random() - 0.5) * 30,
+                    (Math.random() - 0.5) * 8,
+                    (Math.random() - 0.5) * 15
+                );
+                puff.scale.y = 0.6;  // Flatten slightly
+                cloudGroup.add(puff);
+            }
+
+            cloudGroup.position.set(x, y, z);
+
+            // Cloud movement properties
+            const cloudData = {
+                group: cloudGroup,
+                baseY: y,
+                speedX: (Math.random() - 0.5) * 2,
+                speedZ: (Math.random() - 0.5) * 1,
+                bobSpeed: 0.5 + Math.random() * 0.5,
+                bobAmount: 2 + Math.random() * 3,
+                phase: Math.random() * Math.PI * 2
+            };
+
+            scene.add(cloudGroup);
+            return cloudData;
+        }
+
+        // Create clouds at various positions
+        for (let i = 0; i < 20; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 1.5;
+            const y = 80 + Math.random() * 60;
+            const z = (Math.random() - 0.5) * groundSize * 1.5;
+            clouds.push(createCloud(x, y, z));
+        }
+
+        // Cloud update function
+        function updateClouds(dt) {
+            const time = performance.now() * 0.001;
+            clouds.forEach(cloud => {
+                // Horizontal movement
+                cloud.group.position.x += cloud.speedX * dt;
+                cloud.group.position.z += cloud.speedZ * dt;
+
+                // Vertical bobbing
+                cloud.group.position.y = cloud.baseY + Math.sin(time * cloud.bobSpeed + cloud.phase) * cloud.bobAmount;
+
+                // Wrap around when clouds go too far
+                const limit = groundSize;
+                if (cloud.group.position.x > limit) cloud.group.position.x = -limit;
+                if (cloud.group.position.x < -limit) cloud.group.position.x = limit;
+                if (cloud.group.position.z > limit) cloud.group.position.z = -limit;
+                if (cloud.group.position.z < -limit) cloud.group.position.z = limit;
+            });
+        }
+
         // --- 11. COLLISION DETECTION ---
+        function checkTreeCollision() {
+            for (const tree of trees) {
+                const dx = physics.position.x - tree.position.x;
+                const dz = physics.position.z - tree.position.z;
+                const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+
+                // Check if within tree's collision cylinder
+                if (horizontalDist < tree.radius + physics.droneRadius &&
+                    physics.position.y < tree.height) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         function checkGroundCollision() {
             const groundLevel = 0;
             if (physics.position.y < groundLevel + physics.droneRadius) {
@@ -1002,6 +1182,11 @@
                 return;
             }
 
+            if (checkTreeCollision()) {
+                triggerCrash();
+                return;
+            }
+
             checkGatePass();
         }
 
@@ -1247,6 +1432,7 @@
             const throttle01 = (rawThrottle + 1) / 2;
             updateHUD(throttle01);
             animateProps(throttle01);
+            updateClouds(dt);
 
             renderer.render(scene, camera);
         }
