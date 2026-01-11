@@ -1010,38 +1010,24 @@
 
         // --- 15. CAMERA UPDATE ---
         function updateCamera(dt) {
-            // First-person FPV camera with adjustable tilt angle
+            // FPV camera rigidly attached to drone body
 
-            // Camera position on the drone body
+            // Camera position in drone's local space
             const localOffset = cameraController.offset.clone();
             localOffset.applyQuaternion(droneGroup.quaternion);
-            const targetPos = physics.position.clone().add(localOffset);
+            const camPos = physics.position.clone().add(localOffset);
 
-            // Calculate look direction with camera tilt
-            // Start with forward direction (+Z in local space)
-            const tiltRad = THREE.MathUtils.degToRad(cameraController.tiltAngle);
+            // Set camera position
+            camera.position.copy(camPos);
 
-            // Create tilted forward vector (tilt up means looking above horizon)
-            // In drone local space: Z is forward, Y is up
-            const lookDir = new THREE.Vector3(
-                0,
-                Math.sin(tiltRad),      // Y component from tilt
-                Math.cos(tiltRad)       // Z component (forward)
-            );
-            lookDir.normalize();
-            lookDir.multiplyScalar(100);  // Look far ahead
+            // Copy drone's rotation exactly (camera is fixed to drone frame)
+            camera.quaternion.copy(droneGroup.quaternion);
 
-            // Transform to world space using drone's rotation
-            lookDir.applyQuaternion(droneGroup.quaternion);
-            const targetLookAt = physics.position.clone().add(lookDir);
-
-            // Apply with very high responsiveness for FPV feel
-            const lerpFactor = Math.min(1, cameraController.smoothing * dt);
-            cameraController.currentPos.lerp(targetPos, lerpFactor);
-            cameraController.currentLookAt.lerp(targetLookAt, lerpFactor);
-
-            camera.position.copy(cameraController.currentPos);
-            camera.lookAt(cameraController.currentLookAt);
+            // Apply camera tilt (rotation around local X axis)
+            // Negative because we want to tilt the view up, which means rotating camera down
+            const tiltQuat = new THREE.Quaternion();
+            tiltQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -THREE.MathUtils.degToRad(cameraController.tiltAngle));
+            camera.quaternion.multiply(tiltQuat);
         }
 
         // --- 16. HUD UPDATE ---
