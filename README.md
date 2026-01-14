@@ -1,68 +1,140 @@
-# Betaflight Actual Rates Visualizer
+# FPV Drone Simulator
 
-A web-based 3D simulator designed for FPV pilots to test and tune **Betaflight Actual Rates** using a real radio transmitter via USB. This tool provides a zero-risk environment to visualize stick feel and rotation speeds before applying them to a real quadcopter, this page works similarly to the betaflight rate configuration page, allowing you to test your rates in a test environment, without flight controller heat sources. 
+A browser-based 3D FPV drone flying game with blocky art style, realistic Betaflight Actual Rates physics, and multiplayer support. Fly through a vibrant city of colorful buildings, glass skyscrapers, and obstacles using your real radio controller.
 
-[**Launch the Simulator**](https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/) | [**Video**](https://github.com/AristidesAI/Betaflight-Actual-Rates-Simulator-/blob/df0eb93fe2320d19c9b09be1c42b6bcfeea714bc/ActualRates.mp4)
-Img1  | Img2
-:-------------------------:|:-------------------------:
-![Picture1](https://github.com/AristidesAI/Betaflight-Actual-Rates-Simulator-/blob/53126fd967b25ccbf7257757a515e9248be75a61/Screenshot%202026-01-03%20155640.png) | ![Picture2](https://github.com/AristidesAI/Betaflight-Actual-Rates-Simulator-/blob/53126fd967b25ccbf7257757a515e9248be75a61/Screenshot%202026-01-03%20155704.png) 
-
-
-
-
-
+[**Play Now (Single Player)**](https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/)
 
 ## Features
 
-* **Real-time 3D Simulation**: High-performance rendering of a 5-inch FPV drone that reacts instantly to your radio sticks.
-* **Universal Controller Support**: Compatible with any HID-compliant device (Radiomaster Pocket/Zorro/TX16S, TBS Mambo/Tango 2, Jumper, etc.).
-* **Custom Axis Mapping**: A built-in configuration utility to map Roll, Pitch, Yaw, and Throttle to any axis, ensuring compatibility across Windows, macOS, and Linux.
-* **Actual Rates Math**: Accurately simulates the Betaflight "Actual" rate model, including **Center Sensitivity**, **Max Rate**, and **Expo**.
-* **Floating Throttle Physics**: The drone model adjusts altitude based on your throttle stick position for a more immersive feel.
-* **Persistent Settings**: Your rate profiles and controller mappings are saved to your browser's local storage automatically.
+### Flight Physics
+- **Betaflight Actual Rates**: Authentic rate calculations with Center Sensitivity, Max Rate, and Expo
+- **6DOF Physics**: Realistic thrust, gravity, and drag simulation
+- **Acro Mode**: Full manual control - pitch forward to go forward, just like a real quad
 
-## User Documentation
+### Blocky World
+- **Vibrant Colors**: Primary color palette inspired by Slow Roads
+- **Glass Skyscrapers**: Tall towers with reflective glass floors
+- **Fly-Through Gaps**: Buildings with openings to thread through
+- **Arches & Obstacles**: Various structures to navigate around and under
+- **Boundary Walls**: Red transparent walls mark the map edges (crash on contact)
 
-### 1. Connecting the Hardware
-1.  Turn on your Radio Transmitter/FPV Controller, any will work and the site has been customized to allow for multiple controller modes:
-![https://drones.stackexchange.com/questions/186/what-are-modes-of-a-transmitter-controller]
-2.  Ensure your model is set to **USB Joystick** or **HID Mode**.
-3.  Connect the radio to your PC via a USB-C cable.
-4.  Open the [Visualizer](https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/).
-5.  A **Floating Notification** will appear in the top-right corner once the browser detects the device.
+### Multiplayer (Server Required)
+- **Real-time Multiplayer**: Fly with friends in the same world
+- **NPC Drones**: 8 AI-controlled drones with different behaviors:
+  - Freestyle: Tricks and aggressive maneuvers
+  - Racing: Fast, smooth racing lines
+  - Explorer: Slow, cinematic movements
+  - Beginner: Hesitant, learning to fly
+- **Random Names**: Auto-generated pilot names
+- **Player Collision**: Crash into other players
 
-### 2. Configuring Your Controller
-Since different operating systems and radios map axes differently, you must map your sticks:
+### Controller Support
+- **Universal Compatibility**: Works with any USB radio (Radiomaster, TBS, Jumper, etc.)
+- **Custom Mapping**: Configure any axis for Roll/Pitch/Yaw/Throttle
+- **Persistent Settings**: Saved to browser localStorage
 
-1.  Click the **🎮 Configure Controller** button.
-2.  Wiggle your sticks. You will see blue bars moving next to "Axis 0", "Axis 1", etc.
-3.  Assign the moving axis number to the corresponding flight function (Roll, Pitch, Yaw, Throttle).
-4.  Use the **Inv** (Invert) checkbox if a stick direction is reversed.
-5.  Click **Save & Close**.
+## Quick Start
 
-### 3. Understanding the Rates
-The sidebar allows you to input your Betaflight values:
+### Option 1: GitHub Pages (Single Player)
+
+Just open the link - no installation required:
+
+**[https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/](https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/)**
+
+### Option 2: Local Server (Multiplayer)
+
+```bash
+# Clone the repository
+git clone https://github.com/AristidesAI/Betaflight-Actual-Rates-Simulator-.git
+cd Betaflight-Actual-Rates-Simulator-
+
+# Install dependencies
+npm install
+
+# Start the server
+npm start
+```
+
+Open `http://localhost:3000` in your browser. Share this URL on your local network for others to join!
+
+## Deploying to GitHub Pages
+
+GitHub Pages hosts static files only, so the multiplayer server won't work there. However, single-player mode works perfectly.
+
+### Steps to Deploy:
+
+1. **Push your code to GitHub**
+   ```bash
+   git add .
+   git commit -m "Update game"
+   git push origin main
+   ```
+
+2. **Enable GitHub Pages**
+   - Go to your repository on GitHub
+   - Click **Settings** > **Pages** (in the left sidebar)
+   - Under "Source", select **Deploy from a branch**
+   - Choose **main** branch and **/ (root)** folder
+   - Click **Save**
+
+3. **Access your site**
+   - Wait 1-2 minutes for deployment
+   - Your game will be live at: `https://YOUR-USERNAME.github.io/Betaflight-Actual-Rates-Simulator-/`
+
+### Custom Domain (Optional)
+1. In **Settings > Pages**, enter your custom domain
+2. Add a CNAME record pointing to `YOUR-USERNAME.github.io`
+3. Check "Enforce HTTPS"
+
+## Controls
+
+| Input | Action |
+|-------|--------|
+| Right Stick (Horizontal) | Roll |
+| Right Stick (Vertical) | Pitch |
+| Left Stick (Horizontal) | Yaw |
+| Left Stick (Vertical) | Throttle |
+| **R** key | Reset position |
+| **Space** | Start race mode |
+
+## Controller Setup
+
+1. Connect your radio via USB (set to USB Joystick/HID mode)
+2. Click **Configure Controller** button
+3. Move your sticks to see which axes respond
+4. Assign each axis to the correct function
+5. Use **Inv** checkbox if a direction is reversed
+6. Click **Save & Close**
+
+## Rate Tuning
+
+Adjust in the sidebar:
 
 | Setting | Description |
-| :--- | :--- |
-| **Center Sensitivity** | The "feel" around the center of the stick. Higher = more twitchy. |
-| **Max Rate** | The maximum rotation speed in degrees per second at full deflection. |
-| **Expo** | Adds a curve to the stick. Higher values make the center softer while keeping the max rate high. |
+|---------|-------------|
+| **Center Sensitivity** | Responsiveness around stick center (higher = twitchier) |
+| **Max Rate** | Maximum rotation speed in °/sec at full deflection |
+| **Expo** | Softens center while keeping max rate (higher = softer center) |
 
 ## Tech Stack
 
-- **Graphics**: [Three.js](https://threejs.org/) (WebGL)
+- **3D Engine**: [Three.js](https://threejs.org/) r128
 - **Input**: HTML5 Gamepad API
-- **UI/UX**: Material Design CSS with Light/Dark mode support
-- **Logic**: Vanilla JavaScript (ES6+)
+- **Multiplayer**: WebSocket (ws library)
+- **Server**: Node.js (for multiplayer only)
+- **UI**: Vanilla CSS with dark mode support
 
-## Development notes
+## File Structure
 
-The code is intentionally dependency-light: Three.js provides the renderer and HTML5 Gamepad API provides inputs. There is no build system in this repository. For deeper instrumentation add unit tests against `calculateActualRate` using a simple numeric test harness and consider adding a small calibration flow that auto-detects axis numbers by sampling stick motion and selecting the highest-variance axes for mapping.
+```
+├── index.html      # Complete game (single file)
+├── server.js       # Multiplayer server
+├── package.json    # Node.js dependencies
+└── README.md       # This file
+```
 
-## License and credits
+## License
 
-This project references Betaflight algorithms for rate modeling and uses Three.js for 3D rendering. Attribution to Betaflight and Three.js is retained. The author and repository owner is AristidesAI; see the GitHub repository for source, issues, and contributions.
+This project uses Betaflight algorithms for rate modeling and Three.js for 3D rendering.
 
-
-**Created by [AristidesAI](https://github.com/AristidesAI)** [@aristides.fpv on instagram](https://www.instagram.com/aristides.fpv/)
+**Created by [AristidesAI](https://github.com/AristidesAI)** | [@aristides.fpv](https://www.instagram.com/aristides.fpv/)
