@@ -462,6 +462,209 @@
         const savedBestLap = localStorage.getItem('fpv_best_lap');
         if (savedBestLap) gameState.bestLap = parseFloat(savedBestLap);
 
+        // --- 3b. MULTIPLAYER STATE ---
+        const multiplayer = {
+            connected: false,
+            playerId: null,
+            playerName: 'Player',
+            socket: null,
+            otherPlayers: new Map(),
+            npcs: [],
+            otherDrones: new Map()  // THREE.js objects for other players/NPCs
+        };
+
+        // Drone colors for other players
+        const playerColors = [0xFF5733, 0x33FF57, 0x3357FF, 0xFF33F5, 0xF5FF33, 0x33FFF5, 0xFF8833, 0x8833FF];
+
+        // Create a simple drone mesh for other players
+        function createOtherDrone(color) {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.6 });
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.3), bodyMat);
+            body.castShadow = true;
+            group.add(body);
+
+            // Arms
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.5), armMat);
+            arm1.rotation.y = Math.PI / 4;
+            const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.5), armMat);
+            arm2.rotation.y = -Math.PI / 4;
+            group.add(arm1);
+            group.add(arm2);
+
+            return group;
+        }
+
+        // Connect to multiplayer server
+        function connectMultiplayer() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+
+            try {
+                multiplayer.socket = new WebSocket(wsUrl);
+
+                multiplayer.socket.onopen = () => {
+                    multiplayer.connected = true;
+                    showNotification('Connected to server!');
+                };
+
+                multiplayer.socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    handleServerMessage(data);
+                };
+
+                multiplayer.socket.onclose = () => {
+                    multiplayer.connected = false;
+                    showNotification('Disconnected from server');
+                    // Try to reconnect after 3 seconds
+                    setTimeout(connectMultiplayer, 3000);
+                };
+
+                multiplayer.socket.onerror = (error) => {
+                    console.log('WebSocket error - running in single player mode');
+                };
+            } catch (e) {
+                console.log('WebSocket not available - single player mode');
+            }
+        }
+
+        function handleServerMessage(data) {
+            switch (data.type) {
+                case 'welcome':
+                    multiplayer.playerId = data.playerId;
+                    multiplayer.playerName = data.playerName;
+                    showNotification(`Welcome ${data.playerName}!`);
+
+                    // Initialize other players
+                    data.players.forEach(p => {
+                        if (p.id !== multiplayer.playerId) {
+                            addOtherPlayer(p);
+                        }
+                    });
+
+                    // Initialize NPCs
+                    data.npcs.forEach(npc => addNPC(npc));
+                    break;
+
+                case 'playerJoined':
+                    addOtherPlayer(data.player);
+                    showNotification(`${data.player.name} joined`);
+                    break;
+
+                case 'playerLeft':
+                    removeOtherPlayer(data.playerId);
+                    break;
+
+                case 'gameState':
+                    // Update other players
+                    data.players.forEach(p => {
+                        if (p.id !== multiplayer.playerId) {
+                            updateOtherPlayer(p);
+                        }
+                    });
+
+                    // Update NPCs
+                    data.npcs.forEach(npc => updateNPC(npc));
+                    break;
+
+                case 'playerCrashed':
+                    // Could add crash effects for other players here
+                    break;
+
+                case 'nameChanged':
+                    const player = multiplayer.otherPlayers.get(data.playerId);
+                    if (player) {
+                        player.name = data.name;
+                    }
+                    break;
+            }
+        }
+
+        function addOtherPlayer(playerData) {
+            multiplayer.otherPlayers.set(playerData.id, playerData);
+            const color = playerColors[playerData.id % playerColors.length];
+            const drone = createOtherDrone(color);
+            drone.position.set(playerData.position.x, playerData.position.y, playerData.position.z);
+            scene.add(drone);
+            multiplayer.otherDrones.set(playerData.id, drone);
+        }
+
+        function removeOtherPlayer(playerId) {
+            multiplayer.otherPlayers.delete(playerId);
+            const drone = multiplayer.otherDrones.get(playerId);
+            if (drone) {
+                scene.remove(drone);
+                multiplayer.otherDrones.delete(playerId);
+            }
+        }
+
+        function updateOtherPlayer(playerData) {
+            const drone = multiplayer.otherDrones.get(playerData.id);
+            if (drone) {
+                // Smooth interpolation
+                drone.position.lerp(
+                    new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z),
+                    0.3
+                );
+                drone.rotation.set(playerData.rotation.x, playerData.rotation.y, playerData.rotation.z);
+                drone.visible = !playerData.crashed;
+            } else if (!playerData.crashed) {
+                addOtherPlayer(playerData);
+            }
+        }
+
+        function addNPC(npcData) {
+            const color = 0x888888;  // Grey for NPCs
+            const drone = createOtherDrone(color);
+            drone.position.set(npcData.position.x, npcData.position.y, npcData.position.z);
+            scene.add(drone);
+            multiplayer.otherDrones.set(npcData.id, drone);
+        }
+
+        function updateNPCDrone(npcData) {
+            let drone = multiplayer.otherDrones.get(npcData.id);
+            if (!drone && !npcData.crashed) {
+                addNPC(npcData);
+                drone = multiplayer.otherDrones.get(npcData.id);
+            }
+            if (drone) {
+                drone.position.lerp(
+                    new THREE.Vector3(npcData.position.x, npcData.position.y, npcData.position.z),
+                    0.3
+                );
+                drone.rotation.set(npcData.rotation.x, npcData.rotation.y, npcData.rotation.z);
+                drone.visible = !npcData.crashed;
+            }
+        }
+
+        function sendPlayerUpdate() {
+            if (multiplayer.socket && multiplayer.socket.readyState === WebSocket.OPEN) {
+                multiplayer.socket.send(JSON.stringify({
+                    type: 'update',
+                    position: {
+                        x: physics.position.x,
+                        y: physics.position.y,
+                        z: physics.position.z
+                    },
+                    rotation: {
+                        x: droneGroup.rotation.x,
+                        y: droneGroup.rotation.y,
+                        z: droneGroup.rotation.z
+                    },
+                    velocity: {
+                        x: physics.velocity.x,
+                        y: physics.velocity.y,
+                        z: physics.velocity.z
+                    },
+                    crashed: physics.crashed
+                }));
+            }
+        }
+
+        // Try to connect when page loads
+        setTimeout(connectMultiplayer, 1000);
+
         // --- 4. CAMERA CONTROLLER ---
         const cameraController = {
             offset: new THREE.Vector3(0, 0.12, 0.35),  // Front of drone, between front props
@@ -491,10 +694,6 @@
         // --- 6. THREE.JS SCENE SETUP ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-
-        // Add fog to hide map edges
-        const fogColor = 0xB8D4E8;  // Light blue-grey to blend with horizon
-        scene.fog = new THREE.Fog(fogColor, 50, 180);  // Start at 50, fully opaque at 180
 
         // Create sky dome for static background
         const skyGeometry = new THREE.SphereGeometry(500, 32, 32);
@@ -582,48 +781,61 @@
         sunGlow.position.copy(sunMesh.position);
         scene.add(sunGlow);
 
-        // --- 7. GROUND PLANE WITH GRASS TEXTURE ---
+        // --- 7. GROUND PLANE WITH CONCRETE TEXTURE ---
         const groundSize = 400;
 
-        // Create procedural grass texture
-        const grassCanvas = document.createElement('canvas');
-        grassCanvas.width = 512;
-        grassCanvas.height = 512;
-        const grassCtx = grassCanvas.getContext('2d');
+        // Create procedural concrete/asphalt texture
+        const groundCanvas = document.createElement('canvas');
+        groundCanvas.width = 512;
+        groundCanvas.height = 512;
+        const groundCtx = groundCanvas.getContext('2d');
 
-        // Base green
-        grassCtx.fillStyle = '#3a7d32';
-        grassCtx.fillRect(0, 0, 512, 512);
+        // Base concrete grey
+        groundCtx.fillStyle = '#6a6a6a';
+        groundCtx.fillRect(0, 0, 512, 512);
 
-        // Add grass variation
-        for (let i = 0; i < 10000; i++) {
+        // Add concrete variation
+        for (let i = 0; i < 8000; i++) {
             const x = Math.random() * 512;
             const y = Math.random() * 512;
-            const shade = Math.random() * 50 - 25;
-            const g = Math.floor(125 + shade);
-            grassCtx.fillStyle = `rgb(${45 + Math.random() * 25}, ${g}, ${35 + Math.random() * 25})`;
-            grassCtx.fillRect(x, y, 1 + Math.random() * 3, 1 + Math.random() * 3);
+            const shade = Math.floor(90 + Math.random() * 40);
+            groundCtx.fillStyle = `rgb(${shade}, ${shade}, ${shade + Math.random() * 10})`;
+            groundCtx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
         }
 
-        // Add some darker patches
-        for (let i = 0; i < 80; i++) {
+        // Add some darker patches (oil stains)
+        for (let i = 0; i < 40; i++) {
             const x = Math.random() * 512;
             const y = Math.random() * 512;
-            grassCtx.fillStyle = 'rgba(30, 80, 30, 0.25)';
-            grassCtx.beginPath();
-            grassCtx.arc(x, y, 8 + Math.random() * 25, 0, Math.PI * 2);
-            grassCtx.fill();
+            groundCtx.fillStyle = 'rgba(40, 40, 45, 0.3)';
+            groundCtx.beginPath();
+            groundCtx.arc(x, y, 5 + Math.random() * 15, 0, Math.PI * 2);
+            groundCtx.fill();
         }
 
-        const grassTexture = new THREE.CanvasTexture(grassCanvas);
-        grassTexture.wrapS = THREE.RepeatWrapping;
-        grassTexture.wrapT = THREE.RepeatWrapping;
-        grassTexture.repeat.set(60, 60);
+        // Add grid lines (like concrete slabs)
+        groundCtx.strokeStyle = 'rgba(80, 80, 85, 0.4)';
+        groundCtx.lineWidth = 2;
+        for (let i = 0; i < 512; i += 64) {
+            groundCtx.beginPath();
+            groundCtx.moveTo(i, 0);
+            groundCtx.lineTo(i, 512);
+            groundCtx.stroke();
+            groundCtx.beginPath();
+            groundCtx.moveTo(0, i);
+            groundCtx.lineTo(512, i);
+            groundCtx.stroke();
+        }
+
+        const groundTexture = new THREE.CanvasTexture(groundCanvas);
+        groundTexture.wrapS = THREE.RepeatWrapping;
+        groundTexture.wrapT = THREE.RepeatWrapping;
+        groundTexture.repeat.set(40, 40);
 
         const groundGeom = new THREE.PlaneGeometry(groundSize, groundSize);
         const groundMat = new THREE.MeshStandardMaterial({
-            map: grassTexture,
-            roughness: 0.85
+            map: groundTexture,
+            roughness: 0.9
         });
         const ground = new THREE.Mesh(groundGeom, groundMat);
         ground.rotation.x = -Math.PI / 2;
@@ -672,552 +884,372 @@
         // --- 9. GATES REMOVED - FREE FLIGHT MODE ---
         const gates = [];  // Empty for compatibility
 
-        // --- 10. GREEN SPACE ENVIRONMENT ---
+        // --- 10. BLOCKY WORLD ENVIRONMENT ---
         const buildings = [];
-        const trees = [];
-        const treePositions = [];  // Track all tree positions to prevent overlap
+        const trees = [];  // Empty - no trees in blocky world
 
-        // Minimum spacing between trees
-        const minTreeSpacing = 4;
-
-        // Helper function to check if a tree can be placed without overlapping
-        function canPlaceTree(x, z, radius) {
-            // Skip train track area
-            if (z > trackZ - 8 && z < trackZ + 8) return false;
-
-            // Check against all existing trees
-            for (const t of treePositions) {
-                const dx = x - t.x;
-                const dz = z - t.z;
-                const dist = Math.sqrt(dx * dx + dz * dz);
-                if (dist < radius + t.radius + minTreeSpacing) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        function registerTree(x, z, radius) {
-            treePositions.push({ x, z, radius });
-        }
-
-        // Train track Z position (used for tree avoidance)
-        const trackZ = 90;
-
-        // Glass material (keeping for compatibility)
-        const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1, metalness: 0.9 });
-
-        // --- 10a. TRAIN AND TRACKS ---
-        // Train tracks
-        const trackMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
-        const railMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 });
-
-        // Track bed
-        const trackBed = new THREE.Mesh(new THREE.BoxGeometry(groundSize * 0.8, 0.5, 6), trackMat);
-        trackBed.position.set(0, 0.25, trackZ);
-        trackBed.receiveShadow = true;
-        scene.add(trackBed);
-
-        // Rails
-        for (let offset of [-1.5, 1.5]) {
-            const rail = new THREE.Mesh(new THREE.BoxGeometry(groundSize * 0.8, 0.2, 0.3), railMat);
-            rail.position.set(0, 0.6, trackZ + offset);
-            scene.add(rail);
-        }
-
-
-        // Train
-        const trainGroup = new THREE.Group();
-        const trainMat = new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.5 });
-
-        // Locomotive body - width along X (direction of travel), depth along Z
-        const locomotive = new THREE.Mesh(new THREE.BoxGeometry(14, 4.5, 4), trainMat);
-        locomotive.position.set(0, 2.75, 0);
-        locomotive.castShadow = true;
-        trainGroup.add(locomotive);
-
-        // Locomotive cab (rear section)
-        const cab = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 3.5), trainMat);
-        cab.position.set(-5, 4.5, 0);
-        cab.castShadow = true;
-        trainGroup.add(cab);
-
-        // Train front nose
-        const trainFront = new THREE.Mesh(new THREE.BoxGeometry(3, 3.5, 3.5), trainMat);
-        trainFront.position.set(8, 2.25, 0);
-        trainGroup.add(trainFront);
-
-        // Wheels (cylinders under locomotive)
-        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
-        for (let wx of [-4, 0, 4]) {
-            const wheel = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 4.5, 12), wheelMat);
-            wheel.rotation.x = Math.PI / 2;
-            wheel.position.set(wx, 1, 0);
-            trainGroup.add(wheel);
-        }
-
-        // Carriages
-        const carriageMat = new THREE.MeshStandardMaterial({ color: 0x2255aa });
-        const carriageWindowMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, metalness: 0.3 });
-        for (let i = 0; i < 4; i++) {
-            const carriageGroup = new THREE.Group();
-
-            const carriage = new THREE.Mesh(new THREE.BoxGeometry(12, 4, 3.5), carriageMat);
-            carriage.position.set(0, 2.5, 0);
-            carriage.castShadow = true;
-            carriageGroup.add(carriage);
-
-            // Carriage roof
-            const roof = new THREE.Mesh(new THREE.BoxGeometry(11, 0.5, 3), carriageMat);
-            roof.position.set(0, 4.75, 0);
-            carriageGroup.add(roof);
-
-            // Carriage wheels
-            for (let cwx of [-3, 3]) {
-                const cwheel = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 4, 12), wheelMat);
-                cwheel.rotation.x = Math.PI / 2;
-                cwheel.position.set(cwx, 0.8, 0);
-                carriageGroup.add(cwheel);
-            }
-
-            carriageGroup.position.set(-16 - i * 14, 0, 0);
-            trainGroup.add(carriageGroup);
-        }
-
-        // Position train on track - Y at 0 so wheels sit on rails
-        trainGroup.position.set(-100, 0, trackZ);
-        scene.add(trainGroup);
-
-        // Train collision data (bounding box that moves with train)
-        const trainCollision = {
-            length: 75,  // Total train length
-            width: 4,    // Width of train
-            height: 6,   // Height of train
-            offsetX: -20 // Center offset (train extends more backward)
+        // Vibrant primary color palette (Slow Roads style)
+        const blockColors = {
+            red: 0xE53935,
+            blue: 0x1E88E5,
+            yellow: 0xFDD835,
+            green: 0x43A047,
+            orange: 0xFB8C00,
+            purple: 0x8E24AA,
+            cyan: 0x00ACC1,
+            pink: 0xD81B60,
+            white: 0xF5F5F5,
+            darkGrey: 0x424242
         };
 
-        // Animate train
-        let trainX = -100;
-        function updateTrain(dt) {
-            trainX += 20 * dt;  // Slightly faster
-            if (trainX > groundSize / 2 + 50) trainX = -groundSize / 2 - 50;
-            trainGroup.position.x = trainX;
+        const colorValues = Object.values(blockColors);
+        function randomBlockColor() {
+            return colorValues[Math.floor(Math.random() * (colorValues.length - 2))]; // Exclude white/grey
         }
 
-        // Train collision check function
-        function checkTrainCollision() {
-            // Get train center position
-            const trainCenterX = trainGroup.position.x + trainCollision.offsetX;
-            const trainZ = trainGroup.position.z;
+        // Glass material for skyscrapers
+        const glassMat = new THREE.MeshStandardMaterial({
+            color: 0x88DDFF,
+            roughness: 0.05,
+            metalness: 0.95,
+            transparent: true,
+            opacity: 0.7
+        });
 
-            const dx = physics.position.x - trainCenterX;
-            const dz = physics.position.z - trainZ;
+        // --- 10a. RED BOUNDARY WALLS ---
+        const boundaryMat = new THREE.MeshStandardMaterial({
+            color: 0xFF0000,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide
+        });
 
-            // Check if within train's bounding box
-            if (Math.abs(dx) < trainCollision.length / 2 + physics.droneRadius &&
-                Math.abs(dz) < trainCollision.width / 2 + physics.droneRadius &&
-                physics.position.y < trainCollision.height) {
+        const boundaryHeight = 100;
+        const boundarySize = groundSize / 2 - 5;
+
+        // Create 4 boundary walls
+        const boundaryWalls = [];
+
+        // North wall (+Z)
+        const northWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        northWall.position.set(0, boundaryHeight / 2, boundarySize);
+        scene.add(northWall);
+        boundaryWalls.push({ axis: 'z', value: boundarySize, normal: -1 });
+
+        // South wall (-Z)
+        const southWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        southWall.position.set(0, boundaryHeight / 2, -boundarySize);
+        southWall.rotation.y = Math.PI;
+        scene.add(southWall);
+        boundaryWalls.push({ axis: 'z', value: -boundarySize, normal: 1 });
+
+        // East wall (+X)
+        const eastWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        eastWall.position.set(boundarySize, boundaryHeight / 2, 0);
+        eastWall.rotation.y = -Math.PI / 2;
+        scene.add(eastWall);
+        boundaryWalls.push({ axis: 'x', value: boundarySize, normal: -1 });
+
+        // West wall (-X)
+        const westWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        westWall.position.set(-boundarySize, boundaryHeight / 2, 0);
+        westWall.rotation.y = Math.PI / 2;
+        scene.add(westWall);
+        boundaryWalls.push({ axis: 'x', value: -boundarySize, normal: 1 });
+
+        // Boundary collision check
+        function checkBoundaryCollision() {
+            const margin = 2;
+            if (Math.abs(physics.position.x) > boundarySize - margin ||
+                Math.abs(physics.position.z) > boundarySize - margin) {
                 return true;
             }
             return false;
         }
 
+        // --- 10b. BLOCKY BUILDINGS ---
 
-        // --- 10b. MANY DIFFERENT TREE TYPES ---
-        const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
-        const birchTrunkMat = new THREE.MeshStandardMaterial({ color: 0xe8e4d9 });
-        const willowTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4a32 });
-
-        // Pine tree
-        function createPineTree(x, z, scale = 1) {
-            const treeGroup = new THREE.Group();
-            const trunkHeight = 5 * scale;
-            const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.3 * scale, 0.5 * scale, trunkHeight, 8),
-                treeTrunkMat
+        // Create a simple blocky building
+        function createBlockyBuilding(x, z, width, depth, height, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+            const building = new THREE.Mesh(
+                new THREE.BoxGeometry(width, height, depth),
+                mat
             );
-            trunk.position.y = trunkHeight / 2;
-            trunk.castShadow = true;
-            treeGroup.add(trunk);
+            building.position.set(x, height / 2, z);
+            building.castShadow = true;
+            building.receiveShadow = true;
+            scene.add(building);
 
-            const foliageColors = [0x1a4d1a, 0x2d5a27, 0x1f5f1f];
-            for (let i = 0; i < 5; i++) {
-                const radius = (4 - i * 0.7) * scale;
-                const foliage = new THREE.Mesh(
-                    new THREE.ConeGeometry(radius, 3 * scale, 8),
-                    new THREE.MeshStandardMaterial({ color: foliageColors[i % 3] })
-                );
-                foliage.position.y = trunkHeight - 1 + i * 1.5 * scale;
-                foliage.castShadow = true;
-                treeGroup.add(foliage);
-            }
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 1.5 * scale, height: trunkHeight + 8 * scale };
+            buildings.push({
+                position: new THREE.Vector3(x, 0, z),
+                width: width,
+                depth: depth,
+                height: height
+            });
+
+            return building;
         }
 
-        // Oak tree (round foliage)
-        function createOakTree(x, z, scale = 1) {
-            const treeGroup = new THREE.Group();
-            const trunkHeight = 4 * scale;
-            const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.4 * scale, 0.6 * scale, trunkHeight, 8),
-                treeTrunkMat
-            );
-            trunk.position.y = trunkHeight / 2;
-            trunk.castShadow = true;
-            treeGroup.add(trunk);
+        // Create building with fly-through gap
+        function createBuildingWithGap(x, z, width, depth, height, gapHeight, gapStart, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
 
-            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x3a7d32 });
-            for (let i = 0; i < 6; i++) {
-                const foliage = new THREE.Mesh(
-                    new THREE.SphereGeometry(2.5 * scale + Math.random(), 8, 6),
-                    foliageMat
+            // Bottom section
+            if (gapStart > 0) {
+                const bottom = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, gapStart, depth),
+                    mat
                 );
-                foliage.position.set(
-                    (Math.random() - 0.5) * 3 * scale,
-                    trunkHeight + 1 + Math.random() * 2 * scale,
-                    (Math.random() - 0.5) * 3 * scale
-                );
-                foliage.castShadow = true;
-                treeGroup.add(foliage);
-            }
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 2 * scale, height: trunkHeight + 6 * scale };
-        }
-
-        // Palm tree
-        function createPalmTree(x, z, scale = 1) {
-            const treeGroup = new THREE.Group();
-            const trunkHeight = 8 * scale;
-            for (let i = 0; i < 8; i++) {
-                const segment = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.3 * scale, 0.35 * scale, trunkHeight / 8, 8),
-                    new THREE.MeshStandardMaterial({ color: 0x8b7355 })
-                );
-                segment.position.y = i * trunkHeight / 8 + trunkHeight / 16;
-                segment.position.x = Math.sin(i * 0.1) * 0.3;
-                segment.castShadow = true;
-                treeGroup.add(segment);
-            }
-            const frondMat = new THREE.MeshStandardMaterial({ color: 0x228b22, side: THREE.DoubleSide });
-            for (let i = 0; i < 8; i++) {
-                const frond = new THREE.Mesh(new THREE.PlaneGeometry(1 * scale, 5 * scale), frondMat);
-                frond.position.y = trunkHeight;
-                frond.rotation.y = (i / 8) * Math.PI * 2;
-                frond.rotation.x = -0.8;
-                treeGroup.add(frond);
-            }
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 1 * scale, height: trunkHeight + 2 * scale };
-        }
-
-        // Birch tree (white bark, yellow-green leaves)
-        function createBirchTree(x, z, scale = 1) {
-            const treeGroup = new THREE.Group();
-            const trunkHeight = 6 * scale;
-            const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.2 * scale, 0.3 * scale, trunkHeight, 8),
-                birchTrunkMat
-            );
-            trunk.position.y = trunkHeight / 2;
-            trunk.castShadow = true;
-            treeGroup.add(trunk);
-
-            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x90b050 });
-            for (let i = 0; i < 4; i++) {
-                const foliage = new THREE.Mesh(
-                    new THREE.SphereGeometry(1.8 * scale + Math.random() * 0.5, 8, 6),
-                    foliageMat
-                );
-                foliage.position.set(
-                    (Math.random() - 0.5) * 2 * scale,
-                    trunkHeight - 1 + i * 1.2 * scale,
-                    (Math.random() - 0.5) * 2 * scale
-                );
-                foliage.castShadow = true;
-                treeGroup.add(foliage);
-            }
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 1.5 * scale, height: trunkHeight + 5 * scale };
-        }
-
-        // Willow tree (drooping branches)
-        function createWillowTree(x, z, scale = 1) {
-            const treeGroup = new THREE.Group();
-            const trunkHeight = 5 * scale;
-            const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.5 * scale, 0.7 * scale, trunkHeight, 8),
-                willowTrunkMat
-            );
-            trunk.position.y = trunkHeight / 2;
-            trunk.castShadow = true;
-            treeGroup.add(trunk);
-
-            // Drooping foliage
-            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x5a8a32, side: THREE.DoubleSide });
-            for (let i = 0; i < 12; i++) {
-                const droop = new THREE.Mesh(
-                    new THREE.PlaneGeometry(0.5 * scale, 4 * scale),
-                    foliageMat
-                );
-                const angle = (i / 12) * Math.PI * 2;
-                droop.position.set(
-                    Math.cos(angle) * 2 * scale,
-                    trunkHeight - 1,
-                    Math.sin(angle) * 2 * scale
-                );
-                droop.rotation.y = angle;
-                droop.rotation.x = 0.5;
-                treeGroup.add(droop);
-            }
-            // Top canopy
-            const canopy = new THREE.Mesh(
-                new THREE.SphereGeometry(3 * scale, 8, 6),
-                foliageMat
-            );
-            canopy.position.y = trunkHeight + 1;
-            canopy.scale.y = 0.6;
-            canopy.castShadow = true;
-            treeGroup.add(canopy);
-
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 2.5 * scale, height: trunkHeight + 4 * scale };
-        }
-
-        // Cypress tree (tall and narrow)
-        function createCypressTree(x, z, scale = 1) {
-            const treeGroup = new THREE.Group();
-            const trunkHeight = 2 * scale;
-            const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.2 * scale, 0.3 * scale, trunkHeight, 8),
-                treeTrunkMat
-            );
-            trunk.position.y = trunkHeight / 2;
-            trunk.castShadow = true;
-            treeGroup.add(trunk);
-
-            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x2d4a1a });
-            const foliage = new THREE.Mesh(
-                new THREE.ConeGeometry(1.5 * scale, 10 * scale, 8),
-                foliageMat
-            );
-            foliage.position.y = trunkHeight + 5 * scale;
-            foliage.castShadow = true;
-            treeGroup.add(foliage);
-
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 1 * scale, height: trunkHeight + 10 * scale };
-        }
-
-        // Maple tree (spreading branches)
-        function createMapleTree(x, z, scale = 1) {
-            const treeGroup = new THREE.Group();
-            const trunkHeight = 3.5 * scale;
-            const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.35 * scale, 0.5 * scale, trunkHeight, 8),
-                treeTrunkMat
-            );
-            trunk.position.y = trunkHeight / 2;
-            trunk.castShadow = true;
-            treeGroup.add(trunk);
-
-            const foliageColors = [0x8b2500, 0xcd3700, 0xff4500, 0x3a7d32];
-            const color = foliageColors[Math.floor(Math.random() * foliageColors.length)];
-            const foliageMat = new THREE.MeshStandardMaterial({ color: color });
-
-            for (let i = 0; i < 8; i++) {
-                const foliage = new THREE.Mesh(
-                    new THREE.SphereGeometry(2 * scale + Math.random() * 0.8, 8, 6),
-                    foliageMat
-                );
-                foliage.position.set(
-                    (Math.random() - 0.5) * 4 * scale,
-                    trunkHeight + Math.random() * 3 * scale,
-                    (Math.random() - 0.5) * 4 * scale
-                );
-                foliage.castShadow = true;
-                treeGroup.add(foliage);
-            }
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 2.5 * scale, height: trunkHeight + 6 * scale };
-        }
-
-        // Bush / shrub
-        function createBush(x, z, scale = 1) {
-            const bushGroup = new THREE.Group();
-            const bushColors = [0x3a7d32, 0x4a8d42, 0x2d6b27, 0x5a9d52];
-            const color = bushColors[Math.floor(Math.random() * bushColors.length)];
-            const bushMat = new THREE.MeshStandardMaterial({ color: color });
-
-            for (let i = 0; i < 4; i++) {
-                const sphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.8 * scale + Math.random() * 0.4, 8, 6),
-                    bushMat
-                );
-                sphere.position.set(
-                    (Math.random() - 0.5) * scale,
-                    0.6 * scale,
-                    (Math.random() - 0.5) * scale
-                );
-                sphere.castShadow = true;
-                bushGroup.add(sphere);
-            }
-            bushGroup.position.set(x, 0, z);
-            scene.add(bushGroup);
-            return { position: new THREE.Vector3(x, 0, z), radius: 1 * scale, height: 1.5 * scale };
-        }
-
-        // ============================================
-        // FILL ENTIRE AREA WITH NON-OVERLAPPING TREES
-        // ============================================
-
-        // Create a tree and register its position
-        function placeTree(x, z, scale, type) {
-            const radius = 2 * scale;
-
-            // Check if this position is valid (no overlap)
-            if (!canPlaceTree(x, z, radius)) return false;
-
-            // Create tree based on type (no palm trees)
-            let tree;
-            if (type < 0.22) {
-                tree = createPineTree(x, z, scale);
-            } else if (type < 0.38) {
-                tree = createOakTree(x, z, scale);
-            } else if (type < 0.50) {
-                tree = createBirchTree(x, z, scale);
-            } else if (type < 0.62) {
-                tree = createWillowTree(x, z, scale);
-            } else if (type < 0.74) {
-                tree = createCypressTree(x, z, scale);
-            } else if (type < 0.86) {
-                tree = createMapleTree(x, z, scale);
-            } else {
-                tree = createBush(x, z, scale);
+                bottom.position.set(x, gapStart / 2, z);
+                bottom.castShadow = true;
+                scene.add(bottom);
             }
 
-            trees.push(tree);
-            registerTree(x, z, radius);
-            return true;
-        }
-
-        // Fill the ground with trees using optimized grid-based placement
-        const treeSpacing = 25;  // Wider spacing for better performance
-        const areaSize = groundSize * 0.85;
-
-        for (let gx = -areaSize / 2; gx < areaSize / 2; gx += treeSpacing) {
-            for (let gz = -areaSize / 2; gz < areaSize / 2; gz += treeSpacing) {
-                // Add randomness to position
-                const x = gx + (Math.random() - 0.5) * treeSpacing * 0.7;
-                const z = gz + (Math.random() - 0.5) * treeSpacing * 0.7;
-
-                // Skip train track area
-                if (z > trackZ - 12 && z < trackZ + 12) continue;
-
-                // Skip spawn area (clear zone for player)
-                if (Math.abs(x) < 20 && z < -100 && z > -140) continue;
-
-                const scale = 0.7 + Math.random() * 0.6;
-                const type = Math.random();
-
-                placeTree(x, z, scale, type);
+            // Top section
+            const topHeight = height - gapStart - gapHeight;
+            if (topHeight > 0) {
+                const top = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, topHeight, depth),
+                    mat
+                );
+                top.position.set(x, gapStart + gapHeight + topHeight / 2, z);
+                top.castShadow = true;
+                scene.add(top);
             }
-        }
 
-        // Add some bushes for variety (reduced count)
-        for (let i = 0; i < 150; i++) {
-            const x = (Math.random() - 0.5) * areaSize;
-            const z = (Math.random() - 0.5) * areaSize;
-
-            if (z > trackZ - 12 && z < trackZ + 12) continue;
-            if (Math.abs(x) < 20 && z < -100 && z > -140) continue;
-
-            const scale = 0.4 + Math.random() * 0.4;
-            if (canPlaceTree(x, z, scale)) {
-                trees.push(createBush(x, z, scale));
-                registerTree(x, z, scale);
+            // Add collision for bottom and top (not gap)
+            if (gapStart > 0) {
+                buildings.push({
+                    position: new THREE.Vector3(x, 0, z),
+                    width: width, depth: depth, height: gapStart
+                });
             }
+            buildings.push({
+                position: new THREE.Vector3(x, gapStart + gapHeight, z),
+                width: width, depth: depth, height: topHeight,
+                baseY: gapStart + gapHeight
+            });
         }
 
-        // ============================================
-        // EXTENSIVE 3D GRASS COVERAGE
-        // ============================================
-
-        const grassMat = new THREE.MeshStandardMaterial({
-            color: 0x4a8b4a,
-            roughness: 0.9,
-            side: THREE.DoubleSide
-        });
-
-        const darkGrassMat = new THREE.MeshStandardMaterial({
-            color: 0x3a7a3a,
-            roughness: 0.9,
-            side: THREE.DoubleSide
-        });
-
-        const lightGrassMat = new THREE.MeshStandardMaterial({
-            color: 0x5a9b5a,
-            roughness: 0.9,
-            side: THREE.DoubleSide
-        });
-
-        function createGrassClump(x, z, tall = false) {
+        // Create glass skyscraper with many floors
+        function createSkyscraper(x, z, width, depth, floors) {
+            const floorHeight = 4;
+            const totalHeight = floors * floorHeight;
             const group = new THREE.Group();
-            const numBlades = tall ? (5 + Math.floor(Math.random() * 4)) : (3 + Math.floor(Math.random() * 3));
-            const mats = [grassMat, darkGrassMat, lightGrassMat];
 
-            for (let i = 0; i < numBlades; i++) {
-                const bladeHeight = tall ? (0.4 + Math.random() * 0.5) : (0.15 + Math.random() * 0.2);
-                const bladeMat = mats[Math.floor(Math.random() * mats.length)];
-                const blade = new THREE.Mesh(
-                    new THREE.PlaneGeometry(0.06, bladeHeight),
-                    bladeMat
+            // Main glass structure
+            const glassMaterial = new THREE.MeshStandardMaterial({
+                color: 0x88DDFF,
+                roughness: 0.05,
+                metalness: 0.9,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            // Core structure
+            const core = new THREE.Mesh(
+                new THREE.BoxGeometry(width * 0.3, totalHeight, depth * 0.3),
+                new THREE.MeshStandardMaterial({ color: 0x333333 })
+            );
+            core.position.y = totalHeight / 2;
+            group.add(core);
+
+            // Glass floors
+            for (let i = 0; i < floors; i++) {
+                const floorY = i * floorHeight + floorHeight / 2;
+
+                // Glass panels on each side
+                const panelMat = new THREE.MeshStandardMaterial({
+                    color: i % 2 === 0 ? 0x88DDFF : 0x66BBDD,
+                    roughness: 0.05,
+                    metalness: 0.95,
+                    transparent: true,
+                    opacity: 0.7
+                });
+
+                // Front and back panels
+                for (let side of [-1, 1]) {
+                    const panel = new THREE.Mesh(
+                        new THREE.BoxGeometry(width, floorHeight - 0.5, 0.2),
+                        panelMat
+                    );
+                    panel.position.set(0, floorY, side * depth / 2);
+                    group.add(panel);
+                }
+
+                // Left and right panels
+                for (let side of [-1, 1]) {
+                    const panel = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.2, floorHeight - 0.5, depth),
+                        panelMat
+                    );
+                    panel.position.set(side * width / 2, floorY, 0);
+                    group.add(panel);
+                }
+
+                // Floor slab
+                const slab = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, 0.3, depth),
+                    new THREE.MeshStandardMaterial({ color: 0x555555 })
                 );
-                blade.position.set(
-                    (Math.random() - 0.5) * 0.2,
-                    bladeHeight / 2,
-                    (Math.random() - 0.5) * 0.2
-                );
-                blade.rotation.y = Math.random() * Math.PI;
-                blade.rotation.x = (Math.random() - 0.5) * 0.4;
-                group.add(blade);
+                slab.position.y = i * floorHeight;
+                group.add(slab);
             }
+
+            // Roof
+            const roof = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 2, 1, depth + 2),
+                new THREE.MeshStandardMaterial({ color: 0x444444 })
+            );
+            roof.position.y = totalHeight;
+            group.add(roof);
+
+            // Antenna
+            const antenna = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.3, 0.3, 15, 8),
+                new THREE.MeshStandardMaterial({ color: 0xCC0000 })
+            );
+            antenna.position.y = totalHeight + 8;
+            group.add(antenna);
 
             group.position.set(x, 0, z);
             scene.add(group);
+
+            buildings.push({
+                position: new THREE.Vector3(x, 0, z),
+                width: width,
+                depth: depth,
+                height: totalHeight + 15
+            });
         }
 
-        // Grass coverage - optimized for performance
-        const grassArea = groundSize * 0.85;
-
-        // Place grass clumps randomly (reduced count for performance)
-        for (let i = 0; i < 2000; i++) {
-            const x = (Math.random() - 0.5) * grassArea;
-            const z = (Math.random() - 0.5) * grassArea;
-
-            // Skip train track
-            if (z > trackZ - 8 && z < trackZ + 8) continue;
-
-            const tall = Math.random() > 0.7;
-            createGrassClump(x, z, tall);
+        // Create blocky terrain ramp to fly under
+        function createRamp(x, z, width, length, height, rotation, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.9 });
+            const ramp = new THREE.Mesh(
+                new THREE.BoxGeometry(width, height, length),
+                mat
+            );
+            ramp.position.set(x, height / 2, z);
+            ramp.rotation.x = rotation;
+            ramp.castShadow = true;
+            scene.add(ramp);
         }
 
-        // Extra tall grass patches near spawn area
-        for (let i = 0; i < 200; i++) {
-            const x = (Math.random() - 0.5) * 80;
-            const z = -150 + Math.random() * 60;
+        // Create arch to fly through
+        function createArch(x, z, width, height, depth, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
 
-            createGrassClump(x, z, true);
+            // Left pillar
+            const leftPillar = new THREE.Mesh(
+                new THREE.BoxGeometry(3, height, depth),
+                mat
+            );
+            leftPillar.position.set(x - width / 2 + 1.5, height / 2, z);
+            leftPillar.castShadow = true;
+            scene.add(leftPillar);
+
+            // Right pillar
+            const rightPillar = new THREE.Mesh(
+                new THREE.BoxGeometry(3, height, depth),
+                mat
+            );
+            rightPillar.position.set(x + width / 2 - 1.5, height / 2, z);
+            rightPillar.castShadow = true;
+            scene.add(rightPillar);
+
+            // Top beam
+            const topBeam = new THREE.Mesh(
+                new THREE.BoxGeometry(width, 3, depth),
+                mat
+            );
+            topBeam.position.set(x, height - 1.5, z);
+            topBeam.castShadow = true;
+            scene.add(topBeam);
+
+            // Collision for pillars
+            buildings.push({
+                position: new THREE.Vector3(x - width / 2 + 1.5, 0, z),
+                width: 3, depth: depth, height: height
+            });
+            buildings.push({
+                position: new THREE.Vector3(x + width / 2 - 1.5, 0, z),
+                width: 3, depth: depth, height: height
+            });
         }
 
-        // --- (Old city code removed) ---
+        // === GENERATE BLOCKY CITY ===
+
+        // Central plaza - open area for spawn
+        // Spawn is at (0, 5, -120), keep that area clear
+
+        // Skyscrapers (tall glass buildings)
+        createSkyscraper(0, 50, 20, 20, 40);      // 160m tall central tower
+        createSkyscraper(-60, 30, 15, 15, 30);   // 120m
+        createSkyscraper(70, 40, 18, 18, 35);    // 140m
+        createSkyscraper(-80, -50, 12, 12, 25);  // 100m
+        createSkyscraper(90, -30, 14, 14, 28);   // 112m
+
+        // Colorful blocky buildings - various sizes
+        createBlockyBuilding(-40, -20, 15, 15, 25, blockColors.red);
+        createBlockyBuilding(30, -40, 20, 12, 18, blockColors.blue);
+        createBlockyBuilding(-25, 80, 18, 18, 30, blockColors.yellow);
+        createBlockyBuilding(50, 70, 12, 20, 22, blockColors.green);
+        createBlockyBuilding(-70, 60, 25, 15, 35, blockColors.orange);
+        createBlockyBuilding(100, 80, 16, 16, 28, blockColors.purple);
+        createBlockyBuilding(-100, 20, 14, 22, 20, blockColors.cyan);
+        createBlockyBuilding(40, 100, 20, 20, 40, blockColors.pink);
+
+        // Buildings with fly-through gaps
+        createBuildingWithGap(-30, 40, 25, 8, 35, 8, 10, blockColors.red);
+        createBuildingWithGap(60, -70, 20, 10, 40, 10, 15, blockColors.blue);
+        createBuildingWithGap(-80, -80, 30, 8, 45, 12, 8, blockColors.yellow);
+        createBuildingWithGap(20, 60, 15, 12, 30, 8, 12, blockColors.green);
+
+        // Arches to fly through
+        createArch(0, -60, 20, 25, 5, blockColors.orange);
+        createArch(-50, 0, 25, 30, 5, blockColors.purple);
+        createArch(80, 20, 18, 22, 5, blockColors.cyan);
+
+        // Low blocky terrain/platforms to fly under
+        createBlockyBuilding(0, 0, 40, 40, 8, blockColors.darkGrey);  // Central platform
+        createBlockyBuilding(-100, -100, 30, 30, 6, blockColors.green);
+        createBlockyBuilding(100, -100, 25, 35, 7, blockColors.blue);
+        createBlockyBuilding(-100, 100, 35, 25, 5, blockColors.red);
+        createBlockyBuilding(100, 100, 28, 28, 9, blockColors.yellow);
+
+        // Scattered smaller blocks for obstacles
+        for (let i = 0; i < 30; i++) {
+            const x = (Math.random() - 0.5) * 300;
+            const z = (Math.random() - 0.5) * 300;
+
+            // Skip spawn area
+            if (Math.abs(x) < 30 && z < -90 && z > -150) continue;
+
+            const width = 5 + Math.random() * 10;
+            const depth = 5 + Math.random() * 10;
+            const height = 8 + Math.random() * 25;
+            const color = randomBlockColor();
+
+            createBlockyBuilding(x, z, width, depth, height, color);
+        }
+
+        // Dummy function for compatibility (no train)
+        function updateTrain(dt) { }
+        function checkTrainCollision() { return false; }
 
         // --- 10c. VARIED CLOUDS ---
         const clouds = [];
@@ -1362,18 +1394,7 @@
         }
 
         function checkTreeCollision() {
-            for (const tree of trees) {
-                const dx = physics.position.x - tree.position.x;
-                const dz = physics.position.z - tree.position.z;
-                const horizontalDist = Math.sqrt(dx * dx + dz * dz);
-
-                // Check if within tree's collision cylinder
-                if (horizontalDist < tree.radius + physics.droneRadius &&
-                    physics.position.y < tree.height) {
-                    return true;
-                }
-            }
-            return false;
+            return false;  // No trees in blocky world
         }
 
         function checkGroundCollision() {
@@ -1671,17 +1692,12 @@
                 return;
             }
 
-            if (checkTreeCollision()) {
+            if (checkBoundaryCollision()) {
                 triggerCrash();
                 return;
             }
 
             if (checkBuildingCollision()) {
-                triggerCrash();
-                return;
-            }
-
-            if (checkTrainCollision()) {
                 triggerCrash();
                 return;
             }
@@ -1932,7 +1948,9 @@
             updateHUD(throttle01);
             animateProps(throttle01);
             updateClouds(dt);
-            updateTrain(dt);
+
+            // Send multiplayer update
+            sendPlayerUpdate();
 
             renderer.render(scene, camera);
         }

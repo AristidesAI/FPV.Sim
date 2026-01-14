@@ -1,0 +1,12 @@
+{
+  "name": "fpv-drone-simulator",
+  "version": "1.0.0",
+  "description": "Multiplayer FPV Drone Racing Simulator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.0"
+  }
+}
