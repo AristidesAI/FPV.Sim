@@ -492,6 +492,10 @@
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
 
+        // Add fog to hide map edges
+        const fogColor = 0xB8D4E8;  // Light blue-grey to blend with horizon
+        scene.fog = new THREE.Fog(fogColor, 50, 180);  // Start at 50, fully opaque at 180
+
         // Create sky dome for static background
         const skyGeometry = new THREE.SphereGeometry(500, 32, 32);
         const skyCanvas = document.createElement('canvas');
@@ -1081,22 +1085,20 @@
             // Check if this position is valid (no overlap)
             if (!canPlaceTree(x, z, radius)) return false;
 
-            // Create tree based on type
+            // Create tree based on type (no palm trees)
             let tree;
-            if (type < 0.20) {
+            if (type < 0.22) {
                 tree = createPineTree(x, z, scale);
-            } else if (type < 0.35) {
+            } else if (type < 0.38) {
                 tree = createOakTree(x, z, scale);
-            } else if (type < 0.45) {
+            } else if (type < 0.50) {
                 tree = createBirchTree(x, z, scale);
-            } else if (type < 0.55) {
+            } else if (type < 0.62) {
                 tree = createWillowTree(x, z, scale);
-            } else if (type < 0.65) {
+            } else if (type < 0.74) {
                 tree = createCypressTree(x, z, scale);
-            } else if (type < 0.75) {
+            } else if (type < 0.86) {
                 tree = createMapleTree(x, z, scale);
-            } else if (type < 0.85) {
-                tree = createPalmTree(x, z, scale);
             } else {
                 tree = createBush(x, z, scale);
             }
@@ -1106,54 +1108,38 @@
             return true;
         }
 
-        // Fill the entire ground with trees using grid-based placement
-        const treeSpacing = 12;  // Base spacing between trees
-        const areaSize = groundSize * 0.9;
+        // Fill the ground with trees using optimized grid-based placement
+        const treeSpacing = 25;  // Wider spacing for better performance
+        const areaSize = groundSize * 0.85;
 
         for (let gx = -areaSize / 2; gx < areaSize / 2; gx += treeSpacing) {
             for (let gz = -areaSize / 2; gz < areaSize / 2; gz += treeSpacing) {
                 // Add randomness to position
-                const x = gx + (Math.random() - 0.5) * treeSpacing * 0.8;
-                const z = gz + (Math.random() - 0.5) * treeSpacing * 0.8;
+                const x = gx + (Math.random() - 0.5) * treeSpacing * 0.7;
+                const z = gz + (Math.random() - 0.5) * treeSpacing * 0.7;
 
                 // Skip train track area
-                if (z > trackZ - 10 && z < trackZ + 10) continue;
+                if (z > trackZ - 12 && z < trackZ + 12) continue;
 
-                // Skip spawn area (small clear zone)
-                if (Math.abs(x) < 15 && z < -100 && z > -140) continue;
+                // Skip spawn area (clear zone for player)
+                if (Math.abs(x) < 20 && z < -100 && z > -140) continue;
 
-                const scale = 0.6 + Math.random() * 0.8;
+                const scale = 0.7 + Math.random() * 0.6;
                 const type = Math.random();
 
                 placeTree(x, z, scale, type);
             }
         }
 
-        // Add extra trees in gaps (second pass with offset grid)
-        for (let gx = -areaSize / 2 + treeSpacing / 2; gx < areaSize / 2; gx += treeSpacing) {
-            for (let gz = -areaSize / 2 + treeSpacing / 2; gz < areaSize / 2; gz += treeSpacing) {
-                const x = gx + (Math.random() - 0.5) * treeSpacing * 0.6;
-                const z = gz + (Math.random() - 0.5) * treeSpacing * 0.6;
-
-                if (z > trackZ - 10 && z < trackZ + 10) continue;
-                if (Math.abs(x) < 15 && z < -100 && z > -140) continue;
-
-                const scale = 0.4 + Math.random() * 0.6;
-                const type = Math.random();
-
-                placeTree(x, z, scale, type);
-            }
-        }
-
-        // Add bushes between trees (denser fill)
-        for (let i = 0; i < 800; i++) {
+        // Add some bushes for variety (reduced count)
+        for (let i = 0; i < 150; i++) {
             const x = (Math.random() - 0.5) * areaSize;
             const z = (Math.random() - 0.5) * areaSize;
 
-            if (z > trackZ - 10 && z < trackZ + 10) continue;
-            if (Math.abs(x) < 15 && z < -100 && z > -140) continue;
+            if (z > trackZ - 12 && z < trackZ + 12) continue;
+            if (Math.abs(x) < 20 && z < -100 && z > -140) continue;
 
-            const scale = 0.3 + Math.random() * 0.5;
+            const scale = 0.4 + Math.random() * 0.4;
             if (canPlaceTree(x, z, scale)) {
                 trees.push(createBush(x, z, scale));
                 registerTree(x, z, scale);
@@ -1208,40 +1194,25 @@
             scene.add(group);
         }
 
-        // Grass coverage - use random placement instead of grid to limit count
-        const grassArea = groundSize * 0.9;
+        // Grass coverage - optimized for performance
+        const grassArea = groundSize * 0.85;
 
-        // Place grass clumps randomly (controlled count)
-        for (let i = 0; i < 8000; i++) {
+        // Place grass clumps randomly (reduced count for performance)
+        for (let i = 0; i < 2000; i++) {
             const x = (Math.random() - 0.5) * grassArea;
             const z = (Math.random() - 0.5) * grassArea;
 
             // Skip train track
-            if (z > trackZ - 6 && z < trackZ + 6) continue;
+            if (z > trackZ - 8 && z < trackZ + 8) continue;
 
-            // Check if not too close to a tree
-            let nearTree = false;
-            for (const t of treePositions) {
-                const dx = x - t.x;
-                const dz = z - t.z;
-                if (Math.sqrt(dx * dx + dz * dz) < t.radius + 0.5) {
-                    nearTree = true;
-                    break;
-                }
-            }
-
-            if (!nearTree) {
-                const tall = Math.random() > 0.7;
-                createGrassClump(x, z, tall);
-            }
+            const tall = Math.random() > 0.7;
+            createGrassClump(x, z, tall);
         }
 
         // Extra tall grass patches near spawn area
-        for (let i = 0; i < 500; i++) {
-            const x = (Math.random() - 0.5) * 100;
-            const z = -150 + Math.random() * 80;
-
-            if (z > trackZ - 6 && z < trackZ + 6) continue;
+        for (let i = 0; i < 200; i++) {
+            const x = (Math.random() - 0.5) * 80;
+            const z = -150 + Math.random() * 60;
 
             createGrassClump(x, z, true);
         }
@@ -1264,46 +1235,28 @@
 
             let vertical = 1;
 
+            // Optimized cloud puff counts for performance
             switch(type) {
                 case 'large':
-                    numPuffs = 12 + Math.floor(Math.random() * 8);
-                    puffSize = 15;
-                    spread = 50;
+                    numPuffs = 5 + Math.floor(Math.random() * 3);
+                    puffSize = 18;
+                    spread = 45;
                     break;
                 case 'wispy':
-                    numPuffs = 3 + Math.floor(Math.random() * 3);
-                    puffSize = 6;
-                    spread = 40;
+                    numPuffs = 2 + Math.floor(Math.random() * 2);
+                    puffSize = 8;
+                    spread = 35;
                     cloudMat.opacity = 0.5;
                     break;
-                case 'storm':
-                    numPuffs = 20 + Math.floor(Math.random() * 10);
-                    puffSize = 20;
-                    spread = 60;
-                    cloudMat.color.setHex(0xaaaaaa);
-                    break;
-                case 'towering':
-                    numPuffs = 15 + Math.floor(Math.random() * 10);
-                    puffSize = 18;
-                    spread = 35;
-                    vertical = 2.5;
-                    break;
-                case 'flat':
-                    numPuffs = 8 + Math.floor(Math.random() * 6);
-                    puffSize = 12;
-                    spread = 70;
-                    vertical = 0.3;
-                    cloudMat.opacity = 0.7;
-                    break;
                 case 'puffy':
-                    numPuffs = 6 + Math.floor(Math.random() * 4);
-                    puffSize = 14;
-                    spread = 25;
+                    numPuffs = 3 + Math.floor(Math.random() * 2);
+                    puffSize = 16;
+                    spread = 20;
                     break;
                 default:
-                    numPuffs = 5 + Math.floor(Math.random() * 5);
-                    puffSize = 10;
-                    spread = 30;
+                    numPuffs = 3 + Math.floor(Math.random() * 3);
+                    puffSize = 12;
+                    spread = 25;
             }
 
             for (let i = 0; i < numPuffs; i++) {
@@ -1326,102 +1279,39 @@
             const cloudData = {
                 group: cloudGroup,
                 baseY: y,
-                speedX: (Math.random() - 0.5) * 3,
-                speedZ: (Math.random() - 0.5) * 1.5,
-                bobSpeed: 0.3 + Math.random() * 0.4,
-                bobAmount: 1 + Math.random() * 2,
+                speedX: (Math.random() - 0.5) * 0.3,      // Very slow drift
+                speedZ: (Math.random() - 0.5) * 0.15,     // Very slow drift
+                bobSpeed: 0.05 + Math.random() * 0.05,    // Gentle bob
+                bobAmount: 0.3 + Math.random() * 0.5,     // Subtle movement
                 phase: Math.random() * Math.PI * 2,
-                rotationSpeed: (Math.random() - 0.5) * 0.02
+                rotationSpeed: (Math.random() - 0.5) * 0.002  // Almost no rotation
             };
 
             scene.add(cloudGroup);
             return cloudData;
         }
 
-        // Create massive cloud coverage
-        // Normal fluffy clouds - 60 clouds
-        for (let i = 0; i < 60; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2.5;
-            const y = 65 + Math.random() * 45;
-            const z = (Math.random() - 0.5) * groundSize * 2.5;
-            clouds.push(createCloud(x, y, z, 'normal'));
-        }
-        // Large cumulus clouds - 30 clouds
-        for (let i = 0; i < 30; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2.5;
-            const y = 90 + Math.random() * 60;
-            const z = (Math.random() - 0.5) * groundSize * 2.5;
-            clouds.push(createCloud(x, y, z, 'large'));
-        }
-        // Wispy cirrus clouds - 40 clouds
-        for (let i = 0; i < 40; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2.5;
-            const y = 55 + Math.random() * 35;
-            const z = (Math.random() - 0.5) * groundSize * 2.5;
-            clouds.push(createCloud(x, y, z, 'wispy'));
-        }
-        // Storm clouds - 10 clouds
-        for (let i = 0; i < 10; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2;
-            const y = 110 + Math.random() * 40;
-            const z = (Math.random() - 0.5) * groundSize * 2;
-            clouds.push(createCloud(x, y, z, 'storm'));
-        }
-        // High altitude thin clouds - 25 clouds
-        for (let i = 0; i < 25; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 3;
-            const y = 140 + Math.random() * 50;
-            const z = (Math.random() - 0.5) * groundSize * 3;
-            clouds.push(createCloud(x, y, z, 'wispy'));
-        }
-        // Low hanging clouds near city - 20 clouds
-        for (let i = 0; i < 20; i++) {
+        // Minimal cloud coverage (~20 clouds total)
+        // Normal fluffy clouds - 8 clouds
+        for (let i = 0; i < 8; i++) {
             const x = (Math.random() - 0.5) * groundSize * 1.5;
-            const y = 45 + Math.random() * 25;
+            const y = 80 + Math.random() * 40;
             const z = (Math.random() - 0.5) * groundSize * 1.5;
             clouds.push(createCloud(x, y, z, 'normal'));
         }
-        // Extra large dramatic clouds - 15 clouds
-        for (let i = 0; i < 15; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2;
-            const y = 100 + Math.random() * 70;
-            const z = (Math.random() - 0.5) * groundSize * 2;
+        // Large cumulus clouds - 5 clouds
+        for (let i = 0; i < 5; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 1.5;
+            const y = 100 + Math.random() * 40;
+            const z = (Math.random() - 0.5) * groundSize * 1.5;
             clouds.push(createCloud(x, y, z, 'large'));
         }
-        // Scattered small puffs - 50 clouds
-        for (let i = 0; i < 50; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2.5;
-            const y = 50 + Math.random() * 60;
-            const z = (Math.random() - 0.5) * groundSize * 2.5;
+        // Wispy clouds - 7 clouds
+        for (let i = 0; i < 7; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2;
+            const y = 110 + Math.random() * 30;
+            const z = (Math.random() - 0.5) * groundSize * 2;
             clouds.push(createCloud(x, y, z, 'wispy'));
-        }
-        // Towering cumulus clouds - 12 clouds
-        for (let i = 0; i < 12; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2;
-            const y = 80 + Math.random() * 40;
-            const z = (Math.random() - 0.5) * groundSize * 2;
-            clouds.push(createCloud(x, y, z, 'towering'));
-        }
-        // Flat stratus clouds - 20 clouds
-        for (let i = 0; i < 20; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2.5;
-            const y = 55 + Math.random() * 30;
-            const z = (Math.random() - 0.5) * groundSize * 2.5;
-            clouds.push(createCloud(x, y, z, 'flat'));
-        }
-        // Puffy cotton-ball clouds - 35 clouds
-        for (let i = 0; i < 35; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 2;
-            const y = 70 + Math.random() * 50;
-            const z = (Math.random() - 0.5) * groundSize * 2;
-            clouds.push(createCloud(x, y, z, 'puffy'));
-        }
-        // Very high altitude wisps - 30 clouds
-        for (let i = 0; i < 30; i++) {
-            const x = (Math.random() - 0.5) * groundSize * 3;
-            const y = 180 + Math.random() * 60;
-            const z = (Math.random() - 0.5) * groundSize * 3;
-            clouds.push(createCloud(x, y, z, 'flat'));
         }
 
         // Cloud update function
