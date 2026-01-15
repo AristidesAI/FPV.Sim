@@ -2,7 +2,7 @@
 
 A browser-based 3D FPV drone flying game with blocky art style, realistic Betaflight Actual Rates physics, and multiplayer support. Fly through a vibrant city of colorful buildings, glass skyscrapers, and obstacles using your real radio controller.
 
-[**Play Now (Single Player)**](https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/)
+[**Play Now (Single Player)**](https://aristidesai.github.io/FPV.Sim/)
 
 ## Features
 
@@ -39,7 +39,7 @@ A browser-based 3D FPV drone flying game with blocky art style, realistic Betafl
 
 Just open the link - no installation required:
 
-**[https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/](https://aristidesai.github.io/Betaflight-Actual-Rates-Simulator-/)**
+**[Play](https://aristidesai.github.io/FPV.Sim/)**
 
 ### Option 2: Local Server (Multiplayer)
 
